@@ -16,9 +16,8 @@ releaseLabel: ci-build
 # license: CC0-1.0 # https://www.hl7.org/fhir/valueset-spdx-license.html
 # jurisdiction: urn:iso:std:iso:3166#US "United States of America" # https://www.hl7.org/fhir/valueset-jurisdiction.html
 publisher:
-  name: Example Publisher
-  url: http://example.org/example-publisher
-  # email: test@example.org
+  name: UZ Leuven
+  url: https://www.uzleuven.be
 
 
 # The dependencies property corresponds to IG.dependsOn. The key is the
@@ -28,7 +27,7 @@ publisher:
 dependencies: 
   hl7.fhir.be.patient-monitoring:
     id: bePatientMonitoring
-    uri: https://build.fhir.org/ig/hl7-be/patient-monitoring/
+    uri: http://hl7belgium.org/fhir/patient-monitoring/ImplementationGuide/hl7.fhir.be.patient-monitoring
     version: current
 
   

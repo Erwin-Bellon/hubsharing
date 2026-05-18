@@ -1,4 +1,4 @@
-# HubSharing FHIR Implementation Guide
+# Hub Sharing FHIR Implementation Guide
 
 A FHIR Implementation Guide (IG) that defines how telemonitoring diagnostic data (e.g., Holter monitoring reports) can
 be shared using the Hubs in the Belgian healthcare ecosystem. It profiles `DiagnosticReport` as the

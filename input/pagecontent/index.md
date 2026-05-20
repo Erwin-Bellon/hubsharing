@@ -6,7 +6,7 @@ The recommended way of reading is the following:
 
 1. [Requirements: what are the base concepts in sharing Telemonitoring information with the hubs](mapping-telemonitoring-to-hub.html): This document contains a base explanation of **what** we want to share between the hubs. 
 2. [Explanation: Resources considered](resource-considerations.html): This document provides an explanation of the considered resources for the requirements, and the decision process for the current proposal. 
-    2a. [Reference: base TMP message](tmp-base-message.html): This contains the base JSON that is currently shared in the telemonitoring project.
+    1. [Reference: base TMP message](tmp-base-message.html): This contains the base JSON that is currently shared in the telemonitoring project.
 3. [Transactions proposed for the workflow](transactions.html): This is a Work-In-Progress that will describe the transactions to get a list of documents from the hub, and to get a specific document from the hub.
 
 Examples for the different resources that are provided are available at: 

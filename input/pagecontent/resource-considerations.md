@@ -1,47 +1,52 @@
-# Resource considerations
+# Architectural & Resource Rationale
 
-This page contains an explanation of the different profiles that have been considered as a carrier of the observation(s) and metadata like `telemonitoring-id`.
+## 1. Context & Architectural Problem
 
-## Requirements
+The Belgian eHealth Hub network acts primarily as a **document sharing infrastructure**. When migrating from legacy KMEHR SOAP Web Services to HL7 FHIR R4, architects had to determine the optimal FHIR resource paradigms to balance:
+1. **Clinical Integrity & Immutability**: A shared medical record (such as a laboratory report or discharge letter) must represent an authenticated snapshot in time that cannot change retroactively without explicit versioning.
+2. **Metadata Discovery vs. Content Retrieval**: Separation between lightweight search operations across millions of records and targeted content retrieval.
+3. **Decoupled Architecture**: Preserving autonomy between independent hospital electronic health records (EHRs) and regional hubs without requiring complex cross-enterprise database synchronization.
+4. **European Harmonization**: Seamless alignment with the **European Health Data Space (EHDS)** and **IHE MHD**.
 
-1. The profile should append metadata like 'patient-id', 'telemonitoring-id' to one or more observations. 
-2. The profile should encompass multiple caresets that are defined in these structures: https://build.fhir.org/ig/hl7-be/patient-monitoring/en/artifacts.html
-3. The profile will have to be able to be converted into a MinimalDocumentReference and a DocumentReference, so that it can be shared between hubs.
+---
 
-## Considerations
+## 2. Evaluation of Evaluated Carrier Paradigms
 
-### Bundle
-An initial consideration was to a [Bundle (messaging type)](https://build.fhir.org/messaging.html).
-The metadata could then reside in the MessageHeader resource.
-This didn't really fit since this seems to be more event-driven, and because this feels like it steers towards an actual routing system for messages, none which are required here. 
+```
++---------------------------------------------------------------------------------------------------+
+| Option                     | Pros                                    | Cons / Reason for Rejection|
++----------------------------+-----------------------------------------+----------------------------+
+| 1. FHIR Messaging          | Built-in MessageHeader and event        | Point-to-point oriented;   |
+|    (Bundle type=message)   | routing semantics.                      | does not support document  |
+|                            |                                         | indexing, search, & archive|
++----------------------------+-----------------------------------------+----------------------------+
+| 2. Direct Resource Queries | Fine-grained queries on individual      | Lacks document integrity,  |
+|    (RESTful Observation/   | resources (e.g. GET /Observation).      | authorship context, legal  |
+|     DiagnosticReport)      |                                         | attestation, & immutability|
++----------------------------+-----------------------------------------+----------------------------+
+| 3. FHIR Document Bundle    | - Self-contained & immutable snapshot   | **SELECTED PARADIGM**      |
+|    (Bundle type=document   | - Mandatory narrative for safety        | (Mandated for all Belgian  |
+|     + Root Composition)    | - Complete clinical context & author    |  Interhub transactions)    |
+|                            | - 100% aligned with IHE MHD & EHDS      |                            |
++----------------------------+-----------------------------------------+----------------------------+
+```
 
-A second consideration was to use a FHIR document, more specific as a [document Composition](https://build.fhir.org/documents.html).
-This is not used because a composition seems to more reference an actual report with an actual readable interpretation.
-Since the observations that we want to share don't specifically require a readable representation, but should initially be focussed on sharing the actual caresets, this approach seems to be a bit too much. 
-A composition might be used later together with the conversion to a (Minimal)DocumentReference if required, since Compositions are documents and transform to a DocumentReference. 
-The biggest issue for the Composition is that the narrative text in `section.text` is a required field. 
-The biggest reason why Composition can fit is because `section.entry` can actually point to the resources that are used in this composition. 
-An extra plus is that compositions are immutable.
-They break the link with their underlying resources.
-This provides a useful snapshot that can easily be timestamped and shared without the need for synchronization.
+### 2.1 Why FHIR Messaging (`Bundle.type = #message`) Was Not Selected
+FHIR Messaging is designed for event-driven, asynchronous routing between known communication endpoints (similar to HL7 v2 messages). However, the Belgian Hub ecosystem is an **indexing, discovery, and retrieval** network, where documents must be registered, cataloged, searched years later, and retrieved on demand. Messaging lacks standard document registry query semantics (`ITI-67`).
 
-### Another Observation
+### 2.2 Why Direct Granular RESTful Resource Access Was Not Selected
+Allowing consumers to query isolated `Observation` or `DiagnosticReport` resources directly across federated hospital databases would expose operational hospital EHR systems to high query loads, introduce security risks, and strip away crucial provenance, institutional authorship, and legal signatures. Furthermore, changes in underlying hospital tables could mutate historical records.
 
-There is a case to be made that there could be a `meta` observation that relates to the other `Observation` resources.
-The issue here is that this limits the encapsulation of the sources to the `Observation`-profile. 
-Other profiles in the caresets, like a `QuestionnaireResponse`, might not fit as easily. 
+### 2.3 The Mandated Solution: FHIR Document Bundles (`Bundle.type = #document`)
+The Belgian Interhub standard mandates that **all shared clinical payloads are strictly exchanged as FHIR Bundles of type `document`**:
+1. **Immutability & Legal Validity**: A FHIR Document is a legally attested, digitally signable snapshot in time. Once generated, its content is fixed. Revisions require creating a new document version linked via `relatesTo`.
+2. **Clinical Safety Narrative (`Composition.section.text`)**: Every document section includes a human-readable XHTML narrative. Clinicians can safely view the content on any workstation, even if the receiving system does not support all discrete code systems.
+3. **Self-Contained Completeness**: All resources referenced by the Composition are bundled within the `Bundle.entry` list, eliminating external URL dependencies during retrieval or long-term archiving.
 
-The concept where this meta-observation will inherit from for example a `HolterObservation` is because the caresets have different observations.
-For every one of these another `Observation` would be made then. 
+---
 
-### ServiceRequest
+## 3. The Role of `DocumentReference` as Discovery Envelope
 
-While a [`ServiceRequest`](https://www.hl7.org/fhir/R4/servicerequest.html) doesn't straight up fit because it's not an order, it seems to have enough support to make the metadata fit.
-A `ServiceRequest` can also contain links to related `Observation` resources through the use of related `reasonReference` attributes.
-The biggest issue here is that this represents an Order, while the current interpretation in [the example json message from the tmp platform](tmp-base-message.md) is more like a report.
-
-## DiagnosticReport (current option)
-
-A [`DiagnosticReport`](https://www.hl7.org/fhir/R4/diagnosticreport.html) seems to be a good fit as well.
-It has the options in `.result` to contain a set of Observations.
-It also represents the results more strongly then the request in `ServiceRequest`.  
+In accordance with **IHE MHD (ITI-67 / ITI-68)**, the metadata envelope (`BeInterhubDocumentReference`) is decoupled from the document payload:
+* **Lightweight Querying**: Searching `DocumentReference` across multiple federated hubs returns small, highly indexable metadata records containing patient SSIN, CD-TRANSACTION category, LOINC type, author, date, and access rules.
+* **On-Demand Retrieval**: The consumer fetches the full document payload (`Bundle` type = `document`) only when the clinician requests it, drastically reducing network bandwidth and hub resource utilization.

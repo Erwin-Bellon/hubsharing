@@ -8,17 +8,5 @@
     <img height="50" alt="Visit the FHIR website" src="{{site.data.info.assets}}assets/images/fhir-logo-www.png"/>
   </a>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script>
-  document.addEventListener("DOMContentLoaded", function() {
-    var codeBlocks = document.querySelectorAll("pre code.language-mermaid, pre.highlight code.language-mermaid, div.language-mermaid pre code, div.language-mermaid pre");
-    codeBlocks.forEach(function(el) {
-      var container = document.createElement("div");
-      container.className = "mermaid";
-      container.textContent = el.textContent;
-      var target = el.closest("div.language-mermaid") || el.closest("pre") || el;
-      target.replaceWith(container);
-    });
-    mermaid.initialize({ startOnLoad: true, theme: 'default' });
-  });
-</script>
+<script src="{{site.data.info.assets}}assets/js/mermaid.min.js"></script>
+<script src="{{site.data.info.assets}}assets/js/mermaid-init.js"></script>

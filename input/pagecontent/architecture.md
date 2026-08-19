@@ -6,35 +6,43 @@ The Belgian healthcare infrastructure is built upon a **federated, decentralized
 
 ### 1.1 Key Actors & Nodes in the Network
 
-```
-+-----------------------------------------------------------------------------------+
-|                           NATIONAL METAHUB REGISTRY                               |
-|                - Patient-to-Hub Indexing & Directory Services                      |
-|                - National Consent & Therapeutic Link Validation                   |
-+-----------------------------------------------------------------------------------+
-                                         |
-     +-----------------------------------+-----------------------------------+
-     |                                   |                                   |
-+-----------------------+     +-----------------------+     +-----------------------+
-|   REGIONAL HUB (CoZo) |     |   REGIONAL HUB (RSW)  |     | REGIONAL HUB (Bruhealth)|
-|  - Regional Registry  |     |  - Regional Registry  |     |  - Regional Registry  |
-|  - Document Gateway   |     |  - Document Gateway   |     |  - Document Gateway   |
-+-----------------------+     +-----------------------+     +-----------------------+
-     |                                   |                                   |
-+-----------------------+     +-----------------------+     +-----------------------+
-|  Hospital EHR Vaults  |     |  Hospital EHR Vaults  |     |  Hospital EHR Vaults  |
-|  (e.g. UZ Leuven)     |     |  (e.g. CHU de Liège)  |     |  (e.g. Cliniques Saint-Luc)|
-+-----------------------+     +-----------------------+     +-----------------------+
+```mermaid
+flowchart TD
+    subgraph MetahubLayer["National Level"]
+        Metahub["<b>National Metahub Registry</b><br/>• Patient-to-Hub Indexing & Directory Services<br/>• National Consent & Therapeutic Link Validation"]
+    end
+
+    subgraph RegionalLayer["eHealth Hub Level (Registries & Gateways)"]
+        CoZo["<b>CoZo</b><br/>(Collaboratief Zorgplatform)"]
+        RSW["<b>RSW</b><br/>(Réseau Santé Wallon)"]
+        RSB["<b>RSB</b><br/>(Réseau Santé Bruxellois)"]
+        Zodap["<b>Zodap</b><br/>(Zorg Data Platform)"]
+    end
+
+    subgraph LocalLayer["Local Repository Level (EHR Vaults)"]
+        UZL["<b>Hospital EHR Vaults</b><br/>e.g. UZ Leuven"]
+        CHU["<b>Hospital EHR Vaults</b><br/>e.g. CHU de Liège"]
+        SaintLuc["<b>Hospital EHR Vaults</b><br/>e.g. Cliniques Saint-Luc"]
+    end
+
+    Metahub --> CoZo
+    Metahub --> RSW
+    Metahub --> RSB
+    Metahub --> Zodap
+
+    CoZo --> UZL
+    RSW --> CHU
+    RSB --> SaintLuc
 ```
 
 1. **National Metahub**:
    * Acts as a central directory indicating which regional hubs hold documents for a specific patient (identified by their national **SSIN / INSS**).
    * Verifies national patient consent and registers therapeutic links between healthcare providers and patients.
-2. **Regional Hubs**:
-   * **CoZo** (Collaborative Care Network - Flanders/national).
-   * **RSW** (Réseau Santé Wallon - Wallonia).
-   * **Bruhealth / Abrumet** (Brussels Health Network).
-   * **VZN KU Leuven** (Flemish Academic Hospital Network).
+2. **eHealth Hubs**:
+   * **CoZo** (Collaboratief Zorgplatform).
+   * **RSW** (Réseau Santé Wallon).
+   * **RSB** (Réseau Santé Bruxellois).
+   * **Zodap** (Zorg Data Platform).
    * Each hub acts as a regional Document Registry and Document Gateway, managing indexing, local access control, and cross-hub routing.
 3. **Hospital EHR Vaults & Clinical Repositories**:
    * Authoritative source systems where clinical documents (laboratory reports, discharge summaries, imaging studies, telemonitoring records) are created, validated, and stored.
@@ -47,34 +55,26 @@ Historically, Interhub communication was specified using SOAP Web Services excha
 
 The modernized Belgian Interhub specification adopts **IHE MHD (Mobile access to Health Documents)** on **HL7® FHIR® R4**, creating a standardized, RESTful architecture:
 
-```
-+-----------------------------------------------------------------------------------+
-|                               MHD RESTful Client                                  |
-|         (Modern EHR, Regional Portal, Mobile Health App, Telemonitoring Client)    |
-+-----------------------------------------------------------------------------------+
-            |                                                      |
-            | ITI-67 (Find DocumentReferences)                     | ITI-68 (Retrieve Document)
-            | [GET /DocumentReference?patient.identifier=...]       | [GET /Bundle/{id}]
-            v                                                      v
-+-----------------------------------------------------------------------------------+
-|                        BELGIAN INTERHUB FHIR RESPONDER                            |
-|                          (Regional Hub / Document Gateway)                        |
-|                                                                                   |
-|   +------------------------------------+   +------------------------------------+ |
-|   | Metadata Layer: DocumentReference  |   | Payload Layer: Document Bundle     | |
-|   | - Unique IDs & OID trees           |   | - Bundle (type = document)         | |
-|   | - Belgian Patient Access Rules     |   | - Root Composition (Lab / TM)      | |
-|   | - HomeCommunityId (Hub OID)        |   | - Clinical Resources & Narrative   | |
-|   +------------------------------------+   +------------------------------------+ |
-+-----------------------------------------------------------------------------------+
-                                         |
-     +-----------------------------------+-----------------------------------+
-     | (Federated ITI-67 / ITI-68)       | (Dual-Stack Mediation)            |
-     v                                   v                                   v
-+-----------------------+     +-----------------------+     +-----------------------+
-|  Remote Regional Hub  |     |  Legacy KMEHR Vault   |     |  EHDS Cross-Border    |
-|  (Home Community B)   |     |  (SOAP/XML Bridge)    |     |  (MyHealth@EU NCP)    |
-+-----------------------+     +-----------------------+     +-----------------------+
+```mermaid
+flowchart TD
+    Client["<b>MHD RESTful Client</b><br/>(Modern EHR, Regional Portal, Mobile Health App, Telemonitoring Client)"]
+
+    subgraph Responder["<b>BELGIAN INTERHUB FHIR RESPONDER</b> (Regional Hub / Document Gateway)"]
+        direction TB
+        MetaLayer["<b>Metadata Layer: DocumentReference</b><br/>• Unique IDs & OID trees<br/>• Belgian Patient Access Rules<br/>• HomeCommunityId (Hub OID)"]
+        PayloadLayer["<b>Payload Layer: Document Bundle</b><br/>• Bundle (type = document)<br/>• Root Composition (Lab / TM)<br/>• Clinical Resources & Narrative"]
+    end
+
+    RemoteHub["<b>Remote Regional Hub</b><br/>(Home Community B)"]
+    LegacyVault["<b>Legacy KMEHR Vault</b><br/>(SOAP/XML Bridge)"]
+    EHDS["<b>EHDS Cross-Border</b><br/>(MyHealth@EU NCP)"]
+
+    Client -->|"ITI-67 (Find DocumentReferences)<br/>GET /DocumentReference?patient.identifier=..."| MetaLayer
+    Client -->|"ITI-68 (Retrieve Document)<br/>GET /Bundle/{id}"| PayloadLayer
+
+    Responder -->|"Federated ITI-67 / ITI-68"| RemoteHub
+    Responder -->|"Dual-Stack Mediation (SOAP Bridge)"| LegacyVault
+    Responder -->|"Cross-Border Exchange"| EHDS
 ```
 
 ---
@@ -98,7 +98,7 @@ In a cross-hub scenario, an **Initiating Hub** queries or retrieves documents fr
 ### 3.2 Routing Mechanics via `homeCommunityId`
 
 1. **Discovery (`getTransactionList` / ITI-67)**:
-   * The Initiating Hub queries the Metahub or federated hubs for a patient.
+   * The initiating hub retrieves the patient links (originally stored in the metahub) and queries each of the eHealth Hubs for the list.
    * Every returned `BeInterhubDocumentReference` contains the mandatory extension `homeCommunityId` (e.g. `urn:oid:1.3.6.1.4.1.21297.1.3`).
 2. **Retrieval (`getTransaction` / ITI-68)**:
    * The consumer inspects `DocumentReference.content.attachment.url` and `homeCommunityId` to dispatch the retrieval request directly to the authoritative repository hosting the document bundle.
@@ -114,23 +114,29 @@ To enable smooth migration without breaking legacy integrations, Belgian Hubs de
 
 ---
 
-## 5. Security Architecture & Connection Routes
+## 5. Security Architecture & Connection Routes (Proposal)
 
-All Interhub transactions operate under strict Belgian healthcare regulations, the Patient Rights Act, and GDPR compliance. The security architecture provides three distinct connection routes to accommodate all integration tiers:
+All Interhub transactions operate under strict Belgian healthcare regulations, the Patient Rights Act, and GDPR compliance. The security architecture provides three distinct connection routes to accommodate integration requirements. 
 
-```
-+---------------------------------------------------------------------------------------------------+
-|                                  THREE AUTHENTICATION ROUTES                                      |
-+---------------------------------------------------------------------------------------------------+
-|  1. Hub-Issued JWT Tokens        |  2. eHealth Platform IAM          |  3. STS Token Exchange Bridge  |
-|  - Asymmetric signed JWTs        |  - Centralized OIDC IdP           |  - SAML 2.0 to OAuth 2.0       |
-|  - Federated Hub-to-Hub trust    |  - eID / itsme® / Enterprise cert |  - Backward compatibility for  |
-|  - Validated via JWKS endpoints  |  - Automated consent validation   |    legacy hospital connectors  |
-+---------------------------------------------------------------------------------------------------+
+> **Important Architectural Note**: The three connection models presented below represent an **architectural proposal**. The final Belgian Interhub standard will **select and mandate one of these three methods** as the unified national authentication framework.
+
+```mermaid
+flowchart LR
+    subgraph Route1["<b>Proposal 1: Hub-Issued JWT Tokens</b>"]
+        R1["• Asymmetric signed JWTs<br/>• Federated Hub-to-Hub trust<br/>• Validated via JWKS endpoints"]
+    end
+    subgraph Route2["<b>Proposal 2: eHealth Platform IAM</b>"]
+        R2["• Centralized OIDC IdP<br/>• eID / itsme® / Enterprise cert<br/>• Automated consent validation"]
+    end
+    subgraph Route3["<b>Proposal 3: STS Token Exchange Bridge</b>"]
+        R3["• SAML 2.0 to OAuth 2.0 (RFC 8693)<br/>• Backward compatibility for legacy hospital connectors<br/>• RESTful FHIR translation"]
+    end
 ```
 
 1. **Route 1: Hub/Enterprise-Issued JWTs**: Direct peer-to-peer trust federation between regional hubs using asymmetric signed JWT bearer tokens validated against public JWKS endpoints.
 2. **Route 2: eHealth Platform IAM**: Centralized identity and access management through the national eHealth OIDC provider, resolving authenticated practitioner NIHDI licenses and institution CBE numbers.
 3. **Route 3: STS Token Exchange Bridge**: Seamless backward compatibility bridge translating legacy SOAP WS-Trust / SAML 2.0 assertions from the eHealth STS into short-lived OAuth 2.0 JWTs (RFC 8693).
+
+In addition, to replace legacy SOAP SAML request signatures and guard against replay attacks and query parameter manipulation in the RESTful FHIR space, all routes evaluate **DPoP (RFC 9449)** and **RFC 9421 (HTTP Message Signatures)**.
 
 For complete technical specifications, see **[Interhub Security Architecture](security.html)** and the **[End-to-End Encryption Discussion Paper](end-to-end-encryption.html)**.

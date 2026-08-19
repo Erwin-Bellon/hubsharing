@@ -109,10 +109,6 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * content.attachment.language ^short = "Human language of document (e.g. nl-BE, fr-BE, de-BE, en)"
 * content.attachment.url 1..1 MS
 * content.attachment.url ^short = "Direct URL endpoint to retrieve the FHIR Document Bundle (ITI-68 retrieve endpoint)"
-* content.attachment.size 0..1 MS
-* content.attachment.size ^short = "Byte size of the raw document content"
-* content.attachment.hash 0..1 MS
-* content.attachment.hash ^short = "Base64-encoded SHA-1 or SHA-256 hash of the document content"
 * content.attachment.title 0..1 MS
 * content.attachment.title ^short = "Document title"
 

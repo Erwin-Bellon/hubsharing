@@ -13,6 +13,34 @@ In the modernized FHIR-based Belgian Interhub standard, these legacy SOAP operat
 | **`getTransactionList`** | **MHD ITI-67** (`Find DocumentReferences`) | `GET [base]/DocumentReference` (RESTful Search) | `Bundle` (type = `searchset`) containing `BeInterhubDocumentReference` entries |
 | **`getTransaction`** | **MHD ITI-68** (`Retrieve Document`) / `$document` | `GET [base]/Bundle/[id]` or `GET [base]/Composition/[id]/$document` | Complete `BeInterhubDocumentBundle` (type = `document`) |
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Clinician as Clinician / EHR User
+    participant EHR as EHR / Consumer App
+    participant Hub as Belgian Regional Hub (Responder)
+    participant Metahub as National Metahub / Other Hubs
+    participant Vault as Hospital Document Repository
+
+    Note over EHR,Hub: Phase 1: Document Discovery (getTransactionList / ITI-67)
+    Clinician->>EHR: Query documents for Patient (SSIN)
+    EHR->>Hub: GET /DocumentReference?patient.identifier=ssin|...&category=...
+    opt Federated Cross-Hub Query
+        Hub->>Metahub: Query Patient-to-Hub Directory
+        Hub->>Vault: Query local DocumentReferences
+    end
+    Hub-->>EHR: HTTP 200 OK (Bundle type=searchset containing BeInterhubDocumentReference[])
+    EHR-->>Clinician: Display Document List (Category, Type, Date, Author, Status)
+
+    Note over EHR,Hub: Phase 2: Document Retrieval (getTransaction / ITI-68)
+    Clinician->>EHR: Select specific document to view
+    EHR->>Hub: GET /Bundle/{id} (or DocumentReference.content.attachment.url)
+    Hub->>Vault: Fetch full immutable document payload
+    Vault-->>Hub: Return BeInterhubDocumentBundle
+    Hub-->>EHR: HTTP 200 OK (Bundle type=document with Root Composition + Clinical Resources)
+    EHR-->>Clinician: Render narrative sections & discrete data
+```
+
 ---
 
 ## 2. Transaction 1: `getTransactionList` (MHD ITI-67 `Find DocumentReferences`)
@@ -130,8 +158,6 @@ The answering hub returns an **HTTP 200 OK** with a FHIR `Bundle` of type `searc
               "contentType": "application/fhir+json",
               "language": "nl-BE",
               "url": "https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01",
-              "size": 28450,
-              "hash": "f8b65287e00a30b2c39d881e155209d840a32e42",
               "title": "Lab Report - Peeters Jan"
             },
             "format": {
@@ -147,25 +173,170 @@ The answering hub returns an **HTTP 200 OK** with a FHIR `Bundle` of type `searc
 }
 ```
 
-### 2.4 Multi-Hub Aggregation & Partial Failure Handling
+### 2.4 Downstream System Unavailability, Partial Failures & OperationOutcome Handling
 
-When an Initiating Hub federates a query across multiple responding regional hubs:
-1. **Aggregation**: The gateway merges the document entries into a unified searchset bundle.
-2. **Deduplication**: Identical documents indexed across multiple hubs (sharing the same `masterIdentifier` or `uniqueId`) are consolidated.
-3. **Partial Failures (`OperationOutcome`)**: If one regional hub is unreachable or returns an error, the initiating gateway returns **HTTP 200 OK** containing all successfully retrieved entries, alongside a contained `OperationOutcome` resource with severity `warning` detailing the failed community:
+In a federated healthcare ecosystem, executing a document discovery query (`getTransactionList` / MHD ITI-67) requires the responding eHealth Hub to query numerous underlying clinical repositories, hospital EHR vaults, private laboratory information systems (LIS), and remote partner hubs.
+
+In real-world operations, one or more connected downstream systems may be temporarily unavailable—for instance, undergoing scheduled maintenance, experiencing network partition, or failing to respond within configured SLA timeout windows.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Clinician as Clinician / EHR User
+    participant Gateway as Answering eHealth Hub (Gateway)
+    participant Lab1 as Lab Repository A (Active)
+    participant Lab2 as Lab Repository B (Timeout)
+    participant VaultC as Hospital Vault C (Maintenance)
+
+    Clinician->>Gateway: GET /DocumentReference?patient.identifier=ssin|79080412345
+    par Federated Fan-out Queries
+        Gateway->>Lab1: Query documents for patient
+        Gateway->>Lab2: Query documents for patient
+        Gateway->>VaultC: Query documents for patient
+    end
+    Lab1-->>Gateway: 200 OK (2 DocumentReferences found)
+    Note over Lab2,Gateway: ⚠️ Connection Timeout (SLA exceeded)
+    VaultC-->>Gateway: ⚠️ HTTP 503 Service Unavailable (Maintenance)
+
+    Note over Gateway: Merges available DocumentReferences<br/>Constructs OperationOutcome for failed systems<br/>Sets search.mode = #outcome
+    Gateway-->>Clinician: HTTP 200 OK (Bundle type=searchset)<br/>• entry[0..1]: DocumentReference (search.mode = match)<br/>• entry[2]: OperationOutcome (search.mode = outcome)
+```
+
+#### 2.4.1 Architectural Rules for Partial Failures
+
+1. **HTTP Status Code**: The answering Hub **MUST return HTTP 200 OK** (not 500, 502, or 504) as long as the search request was syntactically valid and any available portion of the federated network responded.
+2. **Searchset Bundle Assembly**:
+   * `Bundle.total`: Represents the total count of successfully matched `DocumentReference` records.
+   * `Bundle.entry[]` (`search.mode = "match"`): All valid `BeInterhubDocumentReference` resources discovered from responding nodes.
+   * `Bundle.entry[]` (`search.mode = "outcome"`): A populated **`OperationOutcome`** resource capturing specific issues for each downstream system that failed to reply.
+3. **No Phantom Empty States**: A hub MUST NEVER return an empty `Bundle (total = 0)` without an `OperationOutcome` when underlying systems failed, as this could mislead the treating physician into believing no medical records exist for the patient.
+
+#### 2.4.2 OperationOutcome Issue Structure & Coding
+
+Each failing or timed-out downstream system generates an entry in the `OperationOutcome.issue` list:
+
+| `OperationOutcome.issue` Field | Value / Datatype | Description & Usage |
+| :--- | :--- | :--- |
+| **`severity`** | `code` (`warning` \| `information`) | Fixed to `warning` for partial failures where other document records are returned. |
+| **`code`** | `code` (`timeout` \| `transient` \| `exception` \| `suppressed`) | `timeout`: Downstream system exceeded SLA response time.<br>`transient`: System down for maintenance (HTTP 503).<br>`exception`: Unexpected internal subsystem error.<br>`suppressed`: Records withheld due to patient consent or link policies. |
+| **`details`** | `CodeableConcept` | Standard issue type from `http://terminology.hl7.org/CodeSystem/issue-type` with a human-readable text description. |
+| **`diagnostics`** | `string` | Diagnostic text explicitly identifying the failing repository/system (including NIHDI license, CBE number, or URI) and stating that records from that location could not be included. |
+
+#### 2.4.3 Complete Searchset Bundle Example with OperationOutcome
+
+Below is a complete example of an HTTP 200 OK searchset response containing two matched laboratory document references and an embedded `OperationOutcome` indicating partial downstream timeouts:
 
 ```json
 {
-  "resourceType": "OperationOutcome",
-  "issue": [
+  "resourceType": "Bundle",
+  "id": "bundle-transaction-list-response-partial",
+  "type": "searchset",
+  "total": 1,
+  "entry": [
     {
-      "severity": "warning",
-      "code": "timeout",
-      "diagnostics": "Timeout communicating with Responding Hub Bruhealth (urn:oid:1.3.6.1.4.1.21297.1.1). Results from this hub may be omitted."
+      "fullUrl": "https://hub.cozo.be/fhir/DocumentReference/docref-lab-example-01",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "DocumentReference",
+        "id": "docref-lab-example-01",
+        "meta": {
+          "profile": [
+            "https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-interhub-documentreference"
+          ]
+        },
+        "status": "current",
+        "docStatus": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction",
+                "code": "labresult",
+                "display": "Laboratory Result"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "identifier": {
+            "system": "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin",
+            "value": "79080412345"
+          }
+        },
+        "content": [
+          {
+            "attachment": {
+              "contentType": "application/fhir+json",
+              "language": "nl-BE",
+              "url": "https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01",
+              "title": "Lab Report - Peeters Jan"
+            },
+            "format": {
+              "system": "https://www.ehealth.fgov.be/standards/fhir/interhub/CodeSystem/be-cs-interhub-format-codes",
+              "code": "urn:be:fgov:ehealth:lab:document:1.0",
+              "display": "Belgian Lab Report FHIR Document (v1.0)"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6a28746c-63cf-4a69-8db3-705a5a1f26f2",
+      "search": {
+        "mode": "outcome"
+      },
+      "resource": {
+        "resourceType": "OperationOutcome",
+        "id": "outcome-partial-timeout-example",
+        "issue": [
+          {
+            "severity": "warning",
+            "code": "timeout",
+            "details": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/issue-type",
+                  "code": "timeout",
+                  "display": "Timeout"
+                }
+              ],
+              "text": "Downstream clinical repository timeout"
+            },
+            "diagnostics": "Timeout communicating with connected laboratory repository (NIHDI: 71000012). Results from this facility may be incomplete or omitted from this list."
+          },
+          {
+            "severity": "warning",
+            "code": "transient",
+            "details": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/issue-type",
+                  "code": "transient",
+                  "display": "Transient Issue"
+                }
+              ],
+              "text": "Downstream system unavailable (maintenance)"
+            },
+            "diagnostics": "Connected hospital vault (NIHDI: 72000034) is currently unavailable due to scheduled maintenance. Historical documents from this facility are temporarily excluded."
+          }
+        ]
+      }
     }
   ]
 }
 ```
+
+#### 2.4.4 Consuming Client & EHR Responsibilities
+
+Consuming EHR systems, clinical portals, and mobile applications consuming `getTransactionList` (MHD ITI-67) **MUST implement the following client behaviors**:
+
+1. **Inspect `search.mode = "outcome"`**: Client parsers must actively scan the `Bundle.entry` array for resources with `resourceType == "OperationOutcome"` (or `search.mode == "outcome"`).
+2. **Display Clinical Alert Banners**: When an `OperationOutcome` with severity `warning` is returned, the client user interface MUST present a prominent, non-blocking warning banner to the clinician:
+   > ⚠️ **Notice: Document List Incomplete**  
+   > *One or more connected clinical repositories did not respond (e.g. system maintenance or timeout). Some historical patient documents may not appear in this list.*
+3. **Auditability**: The client system SHOULD log the diagnostics in local access audit logs so support desks can diagnose why specific records were temporarily omitted.
 
 ---
 
@@ -192,30 +363,30 @@ Accept: application/fhir+json
 
 In the Belgian Interhub standard, **all retrieved transaction payloads are strictly Bundles of type `document` (`Bundle.type = #document`)**:
 
-```
-+-----------------------------------------------------------------------------------+
-|                        FHIR BUNDLE (type = "document")                            |
-|                                                                                   |
-|  Bundle.identifier  : Universal Document ID (urn:oid:... or urn:uuid:...)        |
-|  Bundle.timestamp   : Document Creation Timestamp (UTC instant)                   |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[0] : ROOT COMPOSITION (BeInterhubLabComposition / BeTelemonitoring)  | |
-|  |  - Subject       : Reference(Patient)                                       | |
-|  |  - Author        : Reference(Practitioner / Organization)                   | |
-|  |  - Title & Date  : Clinical Title & Document Date                           | |
-|  |  - Section[]     : Narrative text.div + Entry references                    | |
-|  +-----------------------------------------------------------------------------+ |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[1..N] : REFERENCED CLINICAL & CONTEXTUAL RESOURCES                    | |
-|  |  - DiagnosticReport                                                         | |
-|  |  - Observation(s)                                                           | |
-|  |  - Specimen / Device / CarePlan                                             | |
-|  |  - Patient (with SSIN)                                                      | |
-|  |  - Practitioner / Organization / PractitionerRole                           | |
-|  +-----------------------------------------------------------------------------+ |
-+-----------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph DocBundle["<b>FHIR BUNDLE (type = 'document')</b><br/>• identifier: urn:oid:... / urn:uuid:...<br/>• timestamp: UTC Instant"]
+        direction TB
+        subgraph Entry0["<b>entry[0] : ROOT COMPOSITION</b><br/>(BeInterhubLabComposition / BeTelemonitoringComposition)"]
+            CompDetails["• Subject: Reference(Patient)<br/>• Author: Reference(Practitioner / Organization)<br/>• Title & Date: Clinical Title & Document Date<br/>• Section[]: Narrative XHTML text.div + Entry References"]
+        end
+
+        subgraph EntryRest["<b>entry[1..N] : REFERENCED CLINICAL & CONTEXTUAL RESOURCES</b>"]
+            direction TB
+            DiagRep["DiagnosticReport (Lab / Telemonitoring)"]
+            Obs["Observation(s) (Discrete Results / Telemetry)"]
+            SpecDev["Specimen / Device / CarePlan"]
+            Pat["Patient (with Belgian SSIN)"]
+            PractOrg["Practitioner / Organization / PractitionerRole"]
+        end
+
+        Entry0 -->|"section.entry"| DiagRep
+        Entry0 -->|"section.entry"| Obs
+        Entry0 -->|"subject"| Pat
+        Entry0 -->|"author"| PractOrg
+        DiagRep -->|"result"| Obs
+        DiagRep -->|"specimen / device"| SpecDev
+    end
 ```
 
 #### Bundle Constraints:

@@ -12,41 +12,48 @@ Under the modernized Interhub FHIR specification, all laboratory reports are pub
 
 A Belgian Laboratory Report FHIR Document is structured as follows:
 
-```
-+-----------------------------------------------------------------------------------+
-|               LABORATORY REPORT FHIR BUNDLE (Bundle.type = "document")            |
-|                                                                                   |
-|  Bundle.identifier  : urn:oid:1.3.6.1.4.1.21297.100.2.1.815933567                 |
-|  Bundle.timestamp   : 2026-03-15T10:30:00Z                                        |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[0] : BeInterhubLabComposition (Root Composition)                     | |
-|  |  - type          : LOINC 11502-2 ("Laboratory report")                      | |
-|  |  - category      : CD-TRANSACTION #labresult ("Laboratory Result")          | |
-|  |  - status        : #final                                                   | |
-|  |  - subject       : Reference(PatientPeeters)                                | |
-|  |  - author        : Reference(DrDanieleGovaerts), Reference(OrgUZLeuven)     | |
-|  |  - section[]     : Structured Narrative + References to DiagnosticReports   | |
-|  +-----------------------------------------------------------------------------+ |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[1] : DiagnosticReport (Panel Header & Conclusion)                     | |
-|  |  - category      : v2-0074 #LAB ("Laboratory")                              | |
-|  |  - code          : LOINC 11502-2 ("Laboratory report")                      | |
-|  |  - result[]      : Reference(ObsGlucoseExample), Reference(ObsCreatinine)    | |
-|  |  - specimen[]    : Reference(SpecimenBloodExample)                          | |
-|  +-----------------------------------------------------------------------------+ |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[2..N] : Discrete Observations, Specimens, and Participants            | |
-|  |  - Observation: Fasting Blood Glucose (92 mg/dL)                            | |
-|  |  - Observation: Serum Creatinine (0.95 mg/dL)                               | |
-|  |  - Specimen: Venous Blood (collected 2026-03-15T08:15:00Z)                  | |
-|  |  - Patient: Jan Peeters (SSIN: 79080412345)                                 | |
-|  |  - Practitioner: Dr. Danièle Govaerts (NIHDI: 10000007999)                  | |
-|  |  - Organization: UZ Leuven Clinical Biology (NIHDI: 71000012)               | |
-|  +-----------------------------------------------------------------------------+ |
-+-----------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph Bundle["<b>LABORATORY REPORT FHIR BUNDLE</b> (Bundle.type = 'document')<br/>• identifier: urn:oid:1.3.6.1.4.1.21297.100.2.1.815933567<br/>• timestamp: 2026-03-15T10:30:00Z"]
+        direction TB
+
+        subgraph RootComp["<b>entry[0] : BeInterhubLabComposition (Root Composition)</b>"]
+            CompData["• type: LOINC 11502-2 ('Laboratory report')<br/>• category: CD-TRANSACTION #labresult<br/>• status: #final<br/>• title: 'Biochemistry & Hematology Laboratory Report'<br/>• section[0]: 'Clinical Biochemistry' (LOINC 18719-5)<br/>&nbsp;&nbsp;↳ narrative text.div (XHTML)"]
+        end
+
+        subgraph PanelRep["<b>entry[1] : DiagnosticReport</b> (Panel Header & Conclusion)"]
+            RepData["• category: v2-0074 #LAB ('Laboratory')<br/>• code: LOINC 11502-2 ('Laboratory report')<br/>• status: #final<br/>• conclusion: 'All fasting parameters within normal limits'"]
+        end
+
+        subgraph DiscreteEntries["<b>entry[2..N] : Discrete Observations, Specimens & Context</b>"]
+            direction TB
+            ObsGlu["<b>Observation (Glucose)</b><br/>• LOINC 1558-6 (Fasting Glucose)<br/>• value: 92 mg/dL (Ref: 70-99)"]
+            ObsCrea["<b>Observation (Creatinine)</b><br/>• LOINC 2160-0 (Serum Creatinine)<br/>• value: 0.95 mg/dL (Ref: 0.70-1.20)"]
+            Specimen["<b>Specimen (Blood)</b><br/>• SNOMED 119297000 (Blood specimen)<br/>• collected: 2026-03-15T08:15:00Z"]
+            Patient["<b>Patient (Jan Peeters)</b><br/>• SSIN: 79080412345"]
+            Practitioner["<b>Practitioner (Dr. Danièle Govaerts)</b><br/>• NIHDI: 10000007999"]
+            Org["<b>Organization (UZ Leuven)</b><br/>• NIHDI: 71000012"]
+        end
+
+        RootComp -->|"subject"| Patient
+        RootComp -->|"author"| Practitioner
+        RootComp -->|"author / custodian"| Org
+        RootComp -->|"section.entry"| PanelRep
+        RootComp -->|"section.entry"| ObsGlu
+        RootComp -->|"section.entry"| ObsCrea
+
+        PanelRep -->|"result"| ObsGlu
+        PanelRep -->|"result"| ObsCrea
+        PanelRep -->|"specimen"| Specimen
+        PanelRep -->|"subject"| Patient
+        PanelRep -->|"performer"| Org
+        PanelRep -->|"resultsInterpreter"| Practitioner
+
+        ObsGlu -->|"subject"| Patient
+        ObsGlu -->|"specimen"| Specimen
+        ObsCrea -->|"subject"| Patient
+        ObsCrea -->|"specimen"| Specimen
+    end
 ```
 
 ---

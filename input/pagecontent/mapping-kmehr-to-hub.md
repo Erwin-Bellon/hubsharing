@@ -4,6 +4,40 @@
 
 This specification provides the normative, bi-directional mapping between legacy Belgian **KMEHR** XML messages (used in SOAP Interhub Web Services such as `getTransactionList` and `getTransaction`), intermediate **IHE XDS.b / XCA** constructs, and the target **HL7® FHIR® R4 / IHE MHD** profiles.
 
+```mermaid
+flowchart LR
+    subgraph KMEHR["<b>Legacy Belgian KMEHR</b>"]
+        direction TB
+        K1["TransactionSummaryType / id"]
+        K2["folder / patient / id (INSS)"]
+        K3["transaction / cd (CD-TRANSACTION)"]
+        K4["transaction / author / hcparty"]
+        K5["transaction / lnk (multimedia)"]
+    end
+
+    subgraph XDS["<b>IHE XDS.b / XCA</b>"]
+        direction TB
+        X1["XDSDocumentEntry.uniqueId"]
+        X2["XDSDocumentEntry.patientId"]
+        X3["XDSDocumentEntry.classCode"]
+        X4["authorInstitution / authorPerson"]
+        X5["ExtrinsicObject / mimeType"]
+    end
+
+    subgraph FHIR["<b>HL7 FHIR R4 / IHE MHD</b>"]
+        direction TB
+        F1["BeInterhubDocumentReference<br/>• masterIdentifier / uniqueId<br/>• extension[homeCommunityId]"]
+        F2["subject (Patient with SSIN)"]
+        F3["category[cdTransaction] & type (LOINC)"]
+        F4["author[0..2] (Hub, Org, Practitioner)"]
+        F5["BeInterhubDocumentBundle<br/>(Bundle.type = #document)"]
+    end
+
+    KMEHR <-->|"ebXML Transformation"| XDS
+    XDS <-->|"MHD Profile Mapping"| FHIR
+    KMEHR <===>|"Direct Interhub Mapping"| FHIR
+```
+
 The mapping encompasses:
 1. **Metadata Envelope Mapping**: `TransactionSummaryType` $\longleftrightarrow$ `XDSDocumentEntry` $\longleftrightarrow$ `BeInterhubDocumentReference`.
 2. **Payload Encapsulation Mapping**: KMEHR `<folder>/<transaction>` $\longleftrightarrow$ `BeInterhubDocumentBundle` (`Bundle.type = #document`).
@@ -38,8 +72,6 @@ The mapping encompasses:
 | **Patient Access Denied Reason** | `transaction/cd[@SL="PatientAccessDeniedReasonForPatient"]` | Local withholding explanation slot | `extension[patientAccess].deniedReason` | `string` | Clinical justification for withholding record. |
 | **Source Vault Timestamp** | `transaction/recorddatetime` | Source registration timestamp slot | `extension[recordDateTime]` | `instant` (ISO 8601 UTC) | Persist date/time in source vault. |
 | **MIME Content Type** | `transaction/lnk/@TYPE` | `ExtrinsicObject/@mimeType` | `content.attachment.contentType` | `code` | **`application/fhir+json`** (for FHIR Document Bundles). |
-| **Payload Hash** | Calculated SHA-1 digest of document | `XDSDocumentEntry.hash` (40-char Hex string) | `content.attachment.hash` | `base64Binary` | SHA-1 / SHA-256 hash converted to Base64. |
-| **Payload Size** | Byte size of raw payload | `XDSDocumentEntry.size` (numeric bytes) | `content.attachment.size` | `unsignedInt` | Total byte count of the uncompressed document bundle. |
 | **Document Format Code** | Schema namespace / transaction format | `XDSDocumentEntry.formatCode` | `content.format` | `Coding` | Coded format URI (e.g. `urn:be:fgov:ehealth:lab:document:1.0`). |
 | **Retrieval URL Endpoint** | Internal repository locator | Repository URL endpoint | `content.attachment.url` | `url` | RESTful endpoint to retrieve the `BeInterhubDocumentBundle`. |
 
@@ -94,8 +126,7 @@ During the migration period, legacy systems unable to process native RESTful FHI
     
     <!-- Encapsulated FHIR Document Bundle (Base64-encoded JSON) -->
     <lnk TYPE="multimedia" 
-         MEDIATYPE="application/fhir+json" 
-         SIZE="28450">
+         MEDIATYPE="application/fhir+json">
         ewogICAgInJlc291cmNlVHlwZSI6ICJCdW5kbGUiLAogICAgInR5cGUiOiAiZG9jdW1lbnQiLA...
     </lnk>
 </transaction>

@@ -12,51 +12,41 @@ As Belgium transitions to **HL7® FHIR® R4** and the **IHE MHD** profile family
 
 ## 2. How KMEHR ETEE Used to Work
 
-```
-+-----------------------------------------------------------------------------------+
-|                            LEGACY KMEHR ETEE MODEL                                |
-+-----------------------------------------------------------------------------------+
-|                                                                                   |
-|  [Originating Hospital / HCP]                                                     |
-|        |                                                                          |
-|        | 1. Query Recipient ETK (eHealth ETK Depot by NIHDI / CBE)                |
-|        | 2. Generate Random Symmetric Key (AES-256)                               |
-|        | 3. Encrypt <folder> XML Payload with AES Key                             |
-|        | 4. Encrypt AES Key with Recipient RSA Public Key                         |
-|        v                                                                          |
-|  [KMEHR Message Envelope]                                                         |
-|  +-----------------------------------------------------------------------------+ |
-|  | <header> (Plaintext: Sender, Recipient, Date, Time)                         | |
-|  +-----------------------------------------------------------------------------+ |
-|  | <folder> (Encrypted Base64 Payload - ETK Enveloped-Data)                    | |
-|  +-----------------------------------------------------------------------------+ |
-|        |                                                                          |
-|        v (SOAP Web Services)                                                      |
-|  [Regional Hub / Metahub]  --> Inspects only header/summary (Zero-Knowledge Broker)|
-|        |                                                                          |
-|        v (SOAP getTransaction)                                                    |
-|  [Receiving Physician / EHR]                                                      |
-|        |                                                                          |
-|        | 5. Decrypts AES Key using Private Key on eID / Hardware Token            |
-|        | 6. Decrypts <folder> XML Payload                                         |
-+-----------------------------------------------------------------------------------+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Sender as Originating Hospital / HCP
+    participant ETK as eHealth ETK Depot
+    participant Hub as Regional Hub / Metahub (Zero-Knowledge Broker)
+    participant Receiver as Receiving Physician / EHR
+
+    Sender->>ETK: 1. Query Recipient ETK (by NIHDI / CBE)
+    ETK-->>Sender: Return Recipient RSA Public Key
+    Note over Sender: 2. Generate symmetric AES-256 key<br/>3. Encrypt <folder> XML with AES key<br/>4. Encrypt AES key with Recipient RSA public key
+    Sender->>Hub: 5. SOAP putTransaction / Send Message<br/>(<header> plaintext, <folder> encrypted ETK enveloped-data)
+    Note over Hub: Inspects only plaintext <header><br/>Cannot read encrypted clinical <folder>
+    Receiver->>Hub: 6. SOAP getTransaction
+    Hub-->>Receiver: 7. Return KMEHR Message Envelope
+    Note over Receiver: 8. Decrypt AES key via private key on eID/token<br/>9. Decrypt <folder> XML clinical payload
 ```
 
 ---
 
 ## 3. How Would End-to-End Encryption Look in the FHIR World?
 
-If application-layer payload encryption is retained in FHIR Interhub sharing, three concrete technical mechanisms can be implemented:
+If application-layer payload encryption is retained in FHIR Interhub sharing, two concrete technical mechanisms can be implemented:
 
-```
-+-----------------------------------------------------------------------------------+
-|                         FHIR E2EE ARCHITECTURAL OPTIONS                           |
-+-----------------------------------------------------------------------------------+
-|  Option 1: JSON Web Encryption (JWE)  |  Option 2: CMS / PKCS#7 Enveloped-Data    |
-|  - Modern, native JSON format         |  - Legacy X.509 / ETK format              |
-|  - RFC 7516 / RFC 7518 standard       |  - Cryptographic Message Syntax (RFC 5652)|
-|  - Multi-recipient header support     |  - Direct compatibility with ETK depot    |
-+---------------------------------------+-------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph Options["<b>FHIR E2EE Architectural Options</b>"]
+        direction LR
+        subgraph Opt1["<b>Option 1: JSON Web Encryption (JWE)</b>"]
+            O1["• Modern, native JSON format (RFC 7516 / RFC 7518)<br/>• Multi-recipient header support<br/>• Payload stored as Binary (contentType: application/jose)<br/>• <b>Recommended for FHIR REST</b>"]
+        end
+        subgraph Opt2["<b>Option 2: CMS / PKCS#7 Enveloped-Data</b>"]
+            O2["• Cryptographic Message Syntax (RFC 5652)<br/>• MIME type: application/pkcs7-mime<br/>• Direct reuse of legacy ETK Java/C# libraries<br/>• Requires ASN.1 parsing in web clients"]
+        end
+    end
 ```
 
 ### 3.1 Option 1: JSON Web Encryption (JWE - RFC 7516) *(Recommended for FHIR)*
@@ -134,21 +124,14 @@ Alternatively, the FHIR Document Bundle is encoded into a standard ASN.1 Cryptog
 
 To make an informed national decision, we must evaluate the trade-offs between **Zero-Knowledge Payload Encryption** and **Transport-Layer Security (TLS 1.3 / mTLS) + Authorization Layer Controls**:
 
-```
-+---------------------------------------------------------------------------------------------------+
-|                           COMPREHENSIVE TRADE-OFF EVALUATION                                     |
-+---------------------------------------------------------------------------------------------------+
-| Dimension                    | Model A: E2EE Payload Encryption      | Model B: Transport Security (mTLS)|
-|                              | (KMEHR / JWE Zero-Knowledge)          | + OAuth 2.0 (Standard FHIR/EHDS)  |
-+------------------------------+---------------------------------------+-----------------------------------+
-| 1. Intermediary Hub Trust    | Zero-knowledge; hubs cannot read data | Hubs can process plaintext data   |
-| 2. Search & Indexing         | Metadata only; no payload querying    | Deep querying on Observations     |
-| 3. Clinical Decision Support | Impossible at hub/gateway level       | Fully supported                   |
-| 4. Multi-Disciplinary Care   | High complexity (multi-key management)| Simple (Role & link-based auth)   |
-| 5. EHDS Cross-Border Interop | Incompatible without central decrypt  | 100% natively compatible          |
-| 6. Tooling & Ecosystem       | Requires custom cryptographic plugins | Standard FHIR parsers & apps      |
-+------------------------------+---------------------------------------+-----------------------------------+
-```
+| Dimension | Model A: E2EE Payload Encryption (KMEHR / JWE Zero-Knowledge) | Model B: Transport Security (mTLS) + OAuth 2.0 (Standard FHIR/EHDS) |
+| :--- | :--- | :--- |
+| **1. Intermediary Hub Trust** | Zero-knowledge; hubs cannot read data | Hubs can process plaintext data |
+| **2. Search & Indexing** | Metadata only; no payload querying | Deep querying on Observations |
+| **3. Clinical Decision Support** | Impossible at hub/gateway level | Fully supported |
+| **4. Multi-Disciplinary Care** | High complexity (multi-key management) | Simple (Role & link-based auth) |
+| **5. EHDS Cross-Border Interop** | Incompatible without central decrypt | 100% natively compatible |
+| **6. Tooling & Ecosystem** | Requires custom cryptographic plugins | Standard FHIR parsers & apps |
 
 ### 4.1 Detailed Breakdown of Challenges with E2EE in FHIR:
 
@@ -174,21 +157,17 @@ To make an informed national decision, we must evaluate the trade-offs between *
 
 Rather than an "all-or-nothing" approach, this Implementation Guide proposes a **Tiered Hybrid Architecture**:
 
-```
-+-----------------------------------------------------------------------------------+
-|                        TIERED HYBRID SECURITY STRATEGY                            |
-+-----------------------------------------------------------------------------------+
-|                                                                                   |
-|  TIER 1: DEFAULT (General Interhub Document Sharing)                              |
-|  - Payload: Plaintext FHIR Document Bundle (Bundle.type = #document)              |
-|  - Security: TLS 1.3 / mTLS + OAuth 2.0 / eHealth IAM + AuditEvent logging        |
-|  - Capabilities: Full hub indexing, DIGIRELAB observation search, EHDS interop    |
-|                                                                                   |
-|  TIER 2: HIGH-SENSITIVITY / SEALED RECORDS (Targeted Exchanges)                   |
-|  - Payload: JWE-Encrypted FHIR Document Bundle (application/jose)                 |
-|  - Metadata: BeInterhubDocumentReference with BeExtEndToEndEncryption             |
-|  - Use Cases: Psychiatric evaluations, occupational health, genetics, sealed files|
-+-----------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph Strategy["<b>Tiered Hybrid Security Strategy</b>"]
+        direction TB
+        subgraph Tier1["<b>TIER 1: DEFAULT (General Interhub Sharing - 95%+ volume)</b>"]
+            T1["• <b>Payload</b>: Plaintext FHIR Document Bundle (Bundle.type = #document)<br/>• <b>Security</b>: TLS 1.3 / mTLS + OAuth 2.0 / eHealth IAM + AuditEvent logging<br/>• <b>Capabilities</b>: Full hub indexing, DIGIRELAB observation search, EHDS cross-border interoperability<br/>• <b>Use Cases</b>: Lab results, telemonitoring, discharge summaries, SUMEHRs"]
+        end
+        subgraph Tier2["<b>TIER 2: HIGH-SENSITIVITY / SEALED RECORDS (Targeted Exchanges)</b>"]
+            T2["• <b>Payload</b>: JWE-Encrypted FHIR Document Bundle (contentType: application/jose)<br/>• <b>Metadata</b>: BeInterhubDocumentReference with BeExtEndToEndEncryption extension<br/>• <b>Security</b>: Asymmetric recipient ETK encryption (zero-knowledge payload)<br/>• <b>Use Cases</b>: Psychiatric evaluations, occupational health, genetics, sealed records"]
+        end
+    end
 ```
 
 1. **Tier 1 (General Exchange - 95%+ of volume)**:

@@ -97,5 +97,4 @@ Description: "An example of a telemonitoring diagnostic report based on the TMP 
 * presentedForm[0].contentType = #application/pdf
 * presentedForm[0].language = #nl
 * presentedForm[0].url = "https://storage.example.org/attachments/doc1.pdf"
-* presentedForm[0].size = 1024
 * presentedForm[0].title = "Monitoring Report"

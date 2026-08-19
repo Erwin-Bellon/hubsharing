@@ -4,11 +4,68 @@
 
 In the Belgian Interhub ecosystem, document discovery is strictly separated from document retrieval. When querying for available health records (`getTransactionList`), client applications receive a lightweight metadata envelope: the **`BeInterhubDocumentReference`**.
 
+```mermaid
+classDiagram
+    class BeInterhubDocumentReference {
+        +masterIdentifier: Identifier (RFC 3986 URI)
+        +identifier[uniqueId]: Identifier (RFC 3986 URI)
+        +identifier[localId]: Identifier (Local Vault ID)
+        +status: code (current | superseded)
+        +docStatus: code (preliminary | final | amended)
+        +category: CD-TRANSACTION (labresult, telemonitoring, sumehr)
+        +type: LOINC (e.g. 11502-2, 10185-7)
+        +date: instant (UTC ISO 8601)
+        +description: string
+        +securityLabel: Confidentiality (N, R, V)
+    }
+
+    class BeExtHomeCommunityId {
+        +valueUri: urn:oid:1.3.6.1.4.1.21297.1.X (Hub OID)
+    }
+
+    class BeExtPatientAccess {
+        +access: code (yes | no | never)
+        +accessDate: date (optional)
+        +deniedReason: string (optional)
+    }
+
+    class BeExtEndToEndEncryption {
+        +actorId: string (NIHDI / CBE / SSIN)
+        +actorType: code (NIHII, CBE, SSIN)
+        +keyId: string (ETK Key ID)
+    }
+
+    class ContentAttachment {
+        +contentType: application/fhir+json
+        +language: nl-BE | fr-BE | de-BE | en
+        +url: https://hub.../fhir/Bundle/{id}
+        +format: Coding (urn:be:fgov:ehealth:...)
+        +title: string
+    }
+
+    class SubjectPatient {
+        +identifier: SSIN / INSS
+    }
+
+    class AuthorList {
+        +author[0]: Regional Hub (Organization)
+        +author[1]: Originating Hospital (Organization)
+        +author[2]: Authoring Physician (Practitioner)
+    }
+
+    BeInterhubDocumentReference *-- BeExtHomeCommunityId : extension
+    BeInterhubDocumentReference *-- BeExtPatientAccess : extension
+    BeInterhubDocumentReference *-- BeExtEndToEndEncryption : extension (opt)
+    BeInterhubDocumentReference *-- ContentAttachment : content.attachment
+    BeInterhubDocumentReference --> SubjectPatient : subject
+    BeInterhubDocumentReference --> AuthorList : author[]
+```
+
 This metadata envelope provides:
 1. **Clinical Context**: Document category (`CD-TRANSACTION`), precise clinical type (LOINC), clinical encounter period, and confidentiality level.
 2. **Author & Institutional Attribution**: Answering hub, originating hospital, and authoring healthcare practitioner.
 3. **Retrieval & Routing Endpoints**: The exact RESTful URL to fetch the full FHIR Document Bundle (`type = #document`), accompanied by the repository Home Community ID.
-4. **Integrity & Technical Payload Characteristics**: Cryptographic hash (SHA-1/SHA-256), exact byte size, MIME content type (`application/fhir+json`), and document format code.
+4. **Technical Payload Characteristics**: MIME content type (`application/fhir+json`), document language, and format specification code.
 5. **Belgian Governance & Access Rules**: Granular patient portal access permissions, release dates, and end-to-end encryption metadata.
 
 ---
@@ -35,8 +92,6 @@ This metadata envelope provides:
 | **`content.attachment.contentType`** | `1..1` | `code` | MIME type of the document payload. For Belgian Interhub document sharing, this is **`application/fhir+json`** (or `application/fhir+xml`). Fallback binary formats like `application/pdf` are also supported. |
 | **`content.attachment.language`** | `0..1` | `code` | BCP-47 / RFC 5646 language tag (`nl-BE`, `fr-BE`, `de-BE`, `en`). |
 | **`content.attachment.url`** | `1..1` | `url` | Direct RESTful URL to retrieve the full FHIR Document Bundle (MHD ITI-68 retrieve endpoint, e.g. `https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01`). |
-| **`content.attachment.size`** | `0..1` | `unsignedInt` | Uncompressed byte size of the document payload. |
-| **`content.attachment.hash`** | `0..1` | `base64Binary` | Cryptographic SHA-1 (or SHA-256) hash of the raw document payload, Base64-encoded. |
 | **`content.attachment.title`** | `0..1` | `string` | Display title for the attachment. |
 | **`content.format`** | `0..1` | `Coding` | Format code identifying the document specification (e.g. `urn:be:fgov:ehealth:lab:document:1.0`, `urn:be:fgov:ehealth:telemonitoring:document:1.0`). |
 | **`context.period`** | `0..1` | `Period` | Start and end date/time of the clinical encounter, hospital stay, or telemonitoring monitoring session. |
@@ -50,7 +105,7 @@ This metadata envelope provides:
 ### 3.1 Home Community ID (`BeExtHomeCommunityId`)
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-home-community-id` (or `urn:ihe:iti:xds:2023:homeCommunityId`)
 * **Cardinality**: `1..1` (Mandatory for Interhub exchanges)
-* **Value**: `uri` (e.g., `urn:oid:1.3.6.1.4.1.21297.1.3` for CoZo, `urn:oid:1.3.6.1.4.1.21297.1.1` for Bruhealth / Abrumet)
+* **Value**: `uri` (e.g., `urn:oid:1.3.6.1.4.1.21297.1.3` for CoZo, `urn:oid:1.3.6.1.4.1.21297.1.1` for RSB)
 * **Purpose**: Identifies the regional hub responsible for managing the document. Essential for cross-community federation, allowing initiating gateways to route retrieve calls to the correct responding hub.
 
 ### 3.2 Belgian Patient Access Metadata (`BeExtPatientAccess`)
@@ -84,28 +139,7 @@ For cross-enterprise transmissions requiring application-level encryption:
 
 ## 4. Technical Algorithms & Developer Rules
 
-### 4.1 Cryptographic Hash Conversion (Hexadecimal $\longleftrightarrow$ Base64)
-
-* **Legacy KMEHR / XDS**: SHA-1 hashes are represented as a **40-character hexadecimal string** (e.g. `f8b65287e00a30b2c39d881e155209d840a32e42`).
-* **FHIR R4**: `content.attachment.hash` requires a **Base64-encoded binary representation** (`base64Binary`).
-
-#### Python Reference Implementation:
-```python
-import base64
-import binascii
-
-def hex_hash_to_fhir_base64(hex_str: str) -> str:
-    """Converts a 40-character hex hash into FHIR base64Binary."""
-    raw_bytes = binascii.unhexlify(hex_str.strip())
-    return base64.b64encode(raw_bytes).decode('ascii')
-
-def fhir_base64_to_hex_hash(b64_str: str) -> str:
-    """Converts FHIR base64Binary hash into a 40-character hex string."""
-    raw_bytes = base64.b64decode(b64_str.strip())
-    return binascii.hexlify(raw_bytes).decode('ascii')
-```
-
-### 4.2 Timezone Normalization to UTC (Z)
+### 4.1 Timezone Normalization to UTC (Z)
 In KMEHR messages, dates and times are often transmitted with local Belgian offsets (CET `+01:00` / CEST `+02:00`) or separated into `<date>` and `<time>` elements. During transformation to FHIR Interhub metadata:
 1. Concatenate date and time strings.
 2. Apply the correct seasonal timezone offset.

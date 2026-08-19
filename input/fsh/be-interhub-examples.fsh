@@ -64,7 +64,7 @@ Description: "Example regional Belgian eHealth Hub (Home Community ID)."
 Usage: #example
 * identifier[0].system = "urn:ietf:rfc:3986"
 * identifier[0].value = "urn:oid:1.3.6.1.4.1.21297.1.3"
-* name = "CoZo - Collaborative Care Network"
+* name = "CoZo (Collaboratief Zorgplatform)"
 
 // =========================================================================
 // METADATA ENVELOPE EXAMPLES (BeInterhubDocumentReference)
@@ -100,8 +100,6 @@ Usage: #example
 * content[0].attachment.contentType = #application/fhir+json
 * content[0].attachment.language = #nl-BE
 * content[0].attachment.url = "https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01"
-* content[0].attachment.size = 28450
-* content[0].attachment.hash = "f8b65287e00a30b2c39d881e155209d840a32e42"
 * content[0].attachment.title = "Lab Report - Peeters Jan"
 * content[0].format = #urn:be:fgov:ehealth:lab:document:1.0
 * context.period.start = "2026-03-15T08:00:00Z"
@@ -136,8 +134,6 @@ Usage: #example
 * content[0].attachment.contentType = #application/fhir+json
 * content[0].attachment.language = #nl-BE
 * content[0].attachment.url = "https://hub.cozo.be/fhir/Bundle/bundle-telemonitoring-example-01"
-* content[0].attachment.size = 19420
-* content[0].attachment.hash = "e1AsOh9IyGCa4hLN+2Od7jlnP14="
 * content[0].attachment.title = "Holter Monitoring Report - Jan Peeters"
 * content[0].format = #urn:be:fgov:ehealth:telemonitoring:document:1.0
 * context.period.start = "2026-01-01T08:00:00Z"
@@ -331,17 +327,38 @@ Usage: #example
 * entry[5].resource = OrgUZLeuven
 
 // =========================================================================
-// SEARCHSET BUNDLE EXAMPLE (MHD ITI-67 / getTransactionList Response)
+// SEARCHSET BUNDLE & OPERATIONOUTCOME EXAMPLES (MHD ITI-67 Response)
 // =========================================================================
+
+Instance: OutcomePartialFailureExample
+InstanceOf: OperationOutcome
+Title: "OperationOutcome: Partial Downstream Failure"
+Description: "Example OperationOutcome returned inside a searchset Bundle when one or more connected downstream systems (such as a laboratory or hospital vault) fail to respond or time out during getTransactionList."
+Usage: #example
+* issue[0].severity = #warning
+* issue[0].code = #timeout
+* issue[0].details.coding[0] = http://terminology.hl7.org/CodeSystem/issue-type#timeout "Timeout"
+* issue[0].details.text = "Downstream clinical repository timeout"
+* issue[0].diagnostics = "Timeout communicating with connected laboratory repository (NIHDI: 71000012). Results from this facility may be incomplete or omitted from this list."
+* issue[1].severity = #warning
+* issue[1].code = #transient
+* issue[1].details.coding[0] = http://terminology.hl7.org/CodeSystem/issue-type#transient "Transient Issue"
+* issue[1].details.text = "Downstream system unavailable (maintenance)"
+* issue[1].diagnostics = "Connected hospital vault (NIHDI: 72000034) is currently unavailable due to scheduled maintenance. Historical documents from this facility are temporarily excluded."
 
 Instance: BundleTransactionListResponseExample
 InstanceOf: Bundle
 Title: "Searchset Bundle: getTransactionList Response (MHD ITI-67)"
-Description: "Example searchset Bundle returned when querying getTransactionList for patient SSIN 79080412345. Contains DocumentReference entries matching the search criteria."
+Description: "Example searchset Bundle returned when querying getTransactionList for patient SSIN 79080412345. Contains DocumentReference entries matching the search criteria alongside an OperationOutcome detailing partial downstream timeouts."
 Usage: #example
 * type = #searchset
 * total = 2
 * entry[0].fullUrl = "https://hub.cozo.be/fhir/DocumentReference/DocRefLabReportExample"
 * entry[0].resource = DocRefLabReportExample
+* entry[0].search.mode = #match
 * entry[1].fullUrl = "https://hub.cozo.be/fhir/DocumentReference/DocRefTelemonitoringExample"
 * entry[1].resource = DocRefTelemonitoringExample
+* entry[1].search.mode = #match
+* entry[2].fullUrl = "urn:uuid:6a28746c-63cf-4a69-8db3-705a5a1f26f2"
+* entry[2].resource = OutcomePartialFailureExample
+* entry[2].search.mode = #outcome

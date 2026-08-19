@@ -15,24 +15,28 @@ A primary requirement of the Belgian Interhub modernization initiative is to ens
 
 ## 2. Structural Alignment: Belgian Interhub vs. EHDS Profiles
 
-```
-+-----------------------------------------------------------------------------------+
-|                        EUROPEAN HEALTH DATA SPACE (EHDS)                          |
-|   - DocumentReferenceEu                                                           |
-|   - CompositionEu / Composition-eu-lab / Composition-eu-hdr                       |
-|   - DiagnosticReport-eu-lab / Observation-resultslab-eu-lab                       |
-+-----------------------------------------------------------------------------------+
-                                         ^
-                                         | Compatible / Specialized
-                                         v
-+-----------------------------------------------------------------------------------+
-|                     BELGIAN INTERHUB FHIR SPECIFICATION                           |
-|   - BeInterhubDocumentReference (extends DocumentReference)                       |
-|   - BeInterhubDocumentBundle (Bundle type = #document)                            |
-|   - BeInterhubLabComposition & BeLaboratoryReport                                 |
-|   - BeTelemonitoringComposition & TelemonitoringDiagnosticReport                  |
-|   + Belgian Extensions: PatientAccess, HomeCommunityId, ETK Encryption            |
-+-----------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph EHDS["<b>EUROPEAN HEALTH DATA SPACE (EHDS) / MyHealth@EU</b>"]
+        direction TB
+        EDocRef["<b>DocumentReferenceEu</b><br/>(Cross-border metadata)"]
+        EComp["<b>Composition-eu-lab / Composition-eu-hdr</b><br/>(Structured European Document Header)"]
+        EResults["<b>DiagnosticReport-eu-lab / Observation-resultslab-eu-lab</b><br/>(LOINC, UCUM, SNOMED CT)"]
+    end
+
+    subgraph BE["<b>BELGIAN INTERHUB FHIR SPECIFICATION</b>"]
+        direction TB
+        BDocRef["<b>BeInterhubDocumentReference</b><br/>• Conforms to DocumentReferenceEu<br/>• Adds Belgian Extensions: PatientAccess, HomeCommunityId, ETK Encryption"]
+        BBundle["<b>BeInterhubDocumentBundle</b> (Bundle type = #document)<br/>• Immutable self-contained snapshot"]
+        BComp["<b>BeInterhubLabComposition / BeTelemonitoringComposition</b><br/>• Compatible with Composition-eu-lab / HDR"]
+        BResults["<b>BeLaboratoryReport / TelemonitoringDiagnosticReport</b><br/>• Belgian & European LOINC/UCUM alignment"]
+    end
+
+    BDocRef -.->|"Compatible & Specializes"| EDocRef
+    BComp -.->|"Compatible & Specializes"| EComp
+    BResults -.->|"Aligned with"| EResults
+    BBundle --> BComp
+    BBundle --> BResults
 ```
 
 ### 2.1 Profile Alignment Matrix
@@ -53,7 +57,7 @@ While maintaining 100% downstream compatibility with EHDS cross-border exchange,
 
 ### 3.1 Federated Multi-Hub Routing (`homeCommunityId`)
 * **EHDS**: Typically models exchanges through a single National Contact Point for eHealth (NCPeH) per Member State.
-* **Belgium**: Operates a federated multi-hub network (CoZo, RSW, Bruhealth/Abrumet, VZN, Metahub). The Belgian profile incorporates `BeExtHomeCommunityId` and `repositoryUniqueId` to support distributed multi-hub queries, deduplication, and direct peer-to-peer document retrieval.
+* **Belgium**: Operates a federated multi-hub network (CoZo, RSW, RSB, Zodap, Metahub). The Belgian profile incorporates `BeExtHomeCommunityId` and `repositoryUniqueId` to support distributed multi-hub queries, deduplication, and direct peer-to-peer document retrieval.
 
 ### 3.2 Granular Patient Access Governance (`BeExtPatientAccess`)
 * **EHDS**: Patient access is generally handled out-of-band at the portal level.
@@ -73,29 +77,33 @@ While maintaining 100% downstream compatibility with EHDS cross-border exchange,
 
 When a foreign European healthcare provider queries for a Belgian patient's records via MyHealth@EU:
 
-```
-[EU Member State Caregiver]
-            |
-            v
-[Foreign National Contact Point (NCPeH)]
-            |
-            | Cross-Border Query (IHE XCA / MHD ITI-67)
-            v
-[Belgian National Contact Point (eHealth NCPeH)]
-            |
-            | Federated ITI-67 (SSIN, Category)
-            v
-[Belgian Regional Hubs (CoZo, RSW, Bruhealth)]
-            |
-            | Return BeInterhubDocumentReference
-            v
-[Belgian NCPeH] ---> Filters PatientAccess rules & converts to EHDS DocumentReferenceEu
-            |
-            | Return DocumentReferenceEu to Foreign NCPeH
-            v
-[Foreign Caregiver Workstation]
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Caregiver as Foreign EU Caregiver
+    participant FNCP as Foreign NCPeH (National Contact Point)
+    participant BENCP as Belgian NCPeH (eHealth Platform)
+    participant Hubs as Belgian eHealth Hubs (CoZo / RSW / RSB / Zodap)
+    participant Vaults as Belgian Hospital Repositories
+
+    Caregiver->>FNCP: Query Belgian Patient Records (SSIN / EU ID)
+    FNCP->>BENCP: Cross-Border Query (IHE XCA / MHD ITI-67 Find DocumentReferences)
+    BENCP->>Hubs: Federated ITI-67 (Patient SSIN, Category)
+    Hubs-->>BENCP: Return BeInterhubDocumentReference[] entries
+    Note over BENCP: • Evaluates Patient Consent<br/>• Applies BeExtPatientAccess rules (filters out withheld documents)<br/>• Transforms to EHDS DocumentReferenceEu
+    BENCP-->>FNCP: Return DocumentReferenceEu[]
+    FNCP-->>Caregiver: Display Document Catalog
+    
+    Caregiver->>FNCP: Retrieve Selected Document Payload (ITI-68)
+    FNCP->>BENCP: Cross-Border Retrieve (MHD ITI-68 / IHE XCA)
+    BENCP->>Hubs: Dispatch Retrieve to authoritative Hub (HomeCommunityId)
+    Hubs->>Vaults: Fetch BeInterhubDocumentBundle
+    Vaults-->>Hubs: Return Document Bundle (type = #document)
+    Hubs-->>BENCP: Return BeInterhubDocumentBundle
+    BENCP-->>FNCP: Return Document Bundle
+    FNCP-->>Caregiver: Render Document in Clinical Workstation
 ```
 
-1. The Belgian NCPeH receives the cross-border query and performs an Interhub `getTransactionList` (MHD ITI-67) search across Belgian regional hubs.
+1. The Belgian NCPeH receives the cross-border query and performs an Interhub `getTransactionList` (MHD ITI-67) search across Belgian eHealth hubs.
 2. The regional hubs return `BeInterhubDocumentReference` entries.
 3. The Belgian NCPeH validates patient consent, filters out documents marked `PatientAccess = never` or sealed, strips internal Belgian-only routing extensions if necessary, and serves the compliant `BeInterhubDocumentBundle` payload to the foreign healthcare provider.

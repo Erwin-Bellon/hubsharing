@@ -4,48 +4,48 @@
 
 In the Belgian healthcare landscape, telemonitoring (remote patient monitoring - TMP) is expanding rapidly across chronic care programs, post-discharge tracking, cardiology (e.g. ambulatory Holter monitoring), diabetes care, and oncology. Telemonitoring platforms collect continuous and episodic sensor data, patient-reported outcome measures (PROMs), and automated diagnostic evaluations.
 
-To ensure that telemonitoring results become part of the longitudinal patient record accessible to all treating physicians across the Belgian federated hubs (CoZo, RSW, Bruhealth, VZN), telemonitoring data is published as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** categorized under `CD-TRANSACTION` code `telemonitoring`.
+To ensure that telemonitoring results become part of the longitudinal patient record accessible to all treating physicians across the Belgian federated hubs (CoZo, RSW, RSB, Zodap), telemonitoring data is published as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** categorized under `CD-TRANSACTION` code `telemonitoring`.
 
 ---
 
 ## 2. Telemonitoring Document Architecture
 
-```
-+-----------------------------------------------------------------------------------+
-|               TELEMONITORING FHIR BUNDLE (Bundle.type = "document")               |
-|                                                                                   |
-|  Bundle.identifier  : urn:uuid:7ed170b3-38d1-4ba5-8a60-1f722b107707               |
-|  Bundle.timestamp   : 2026-01-02T08:30:00Z                                        |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[0] : BeTelemonitoringComposition (Root Composition)                  | |
-|  |  - type          : LOINC 10185-7 ("Holter study") or Remote Monitoring code | |
-|  |  - category      : CD-TRANSACTION #telemonitoring                           | |
-|  |  - status        : #final                                                   | |
-|  |  - subject       : Reference(PatientPeeters)                                | |
-|  |  - author        : Reference(DrJeanDepondt), Reference(OrgUZLeuven)         | |
-|  |  - section[]     : Narrative Summary + References to Reports/Observations   | |
-|  +-----------------------------------------------------------------------------+ |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[1] : TelemonitoringDiagnosticReport                                   | |
-|  |  - extension[telemonitoringId]       : "tm-holter-001"                      | |
-|  |  - extension[carepath]               : "holter-monitoring" (v1.0)           | |
-|  |  - extension[prescriberApplication]  : "TeleMonApp v2.1"                    | |
-|  |  - code                              : LOINC 10185-7 ("Holter study")       | |
-|  |  - result[]                          : Reference(ObsHeartRateSummary)       | |
-|  |  - presentedForm[]                   : PDF Attachment link / base64         | |
-|  +-----------------------------------------------------------------------------+ |
-|                                                                                   |
-|  +-----------------------------------------------------------------------------+ |
-|  | entry[2..N] : Telemetry Observations, Device, and Healthcare Parties       | |
-|  |  - Observation: Mean Heart Rate (74 bpm)                                    | |
-|  |  - Device: CardioTrack Holter X4 (Ambulatory Telemetry Monitor)             | |
-|  |  - Patient: Jan Peeters (SSIN: 79080412345)                                 | |
-|  |  - Practitioner: Dr. Jean Depondt (NIHDI: 19876543201)                      | |
-|  |  - Organization: UZ Leuven Cardiology (NIHDI: 71000012)                     | |
-|  +-----------------------------------------------------------------------------+ |
-+-----------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph Bundle["<b>TELEMONITORING FHIR BUNDLE</b> (Bundle.type = 'document')<br/>• identifier: urn:uuid:7ed170b3-38d1-4ba5-8a60-1f722b107707<br/>• timestamp: 2026-01-02T08:30:00Z"]
+        direction TB
+
+        subgraph RootComp["<b>entry[0] : BeTelemonitoringComposition (Root Composition)</b>"]
+            CompData["• type: LOINC 10185-7 ('Holter study')<br/>• category: CD-TRANSACTION #telemonitoring<br/>• status: #final<br/>• title: '24-Hour Continuous Ambulatory ECG Monitoring Summary'<br/>• section[0]: 'Holter Monitoring Results'<br/>&nbsp;&nbsp;↳ narrative text.div (XHTML)"]
+        end
+
+        subgraph TMDiagRep["<b>entry[1] : TelemonitoringDiagnosticReport</b>"]
+            RepData["• extension[telemonitoringId]: 'tm-holter-001'<br/>• extension[carepath]: 'holter-monitoring' (v1.0)<br/>• extension[prescriberApplication]: 'TeleMonApp v2.1'<br/>• code: LOINC 10185-7 ('Holter study')<br/>• presentedForm: PDF attachment URL"]
+        end
+
+        subgraph DiscreteEntries["<b>entry[2..N] : Telemetry Observations, Devices & Context</b>"]
+            direction TB
+            ObsHR["<b>Observation (Mean Heart Rate)</b><br/>• LOINC 8867-4 (Heart rate)<br/>• value: 74 bpm (beats/min)"]
+            Device["<b>Device (Holter Monitor)</b><br/>• CardioTrack Holter X4"]
+            Patient["<b>Patient (Jan Peeters)</b><br/>• SSIN: 79080412345"]
+            Practitioner["<b>Practitioner (Dr. Jean Depondt)</b><br/>• NIHDI: 19876543201"]
+            Org["<b>Organization (UZ Leuven)</b><br/>• NIHDI: 71000012"]
+        end
+
+        RootComp -->|"subject"| Patient
+        RootComp -->|"author"| Practitioner
+        RootComp -->|"author / custodian"| Org
+        RootComp -->|"section.entry"| TMDiagRep
+        RootComp -->|"section.entry"| ObsHR
+
+        TMDiagRep -->|"result"| ObsHR
+        TMDiagRep -->|"subject"| Patient
+        TMDiagRep -->|"performer"| Practitioner
+
+        ObsHR -->|"subject"| Patient
+        ObsHR -->|"performer"| Practitioner
+        ObsHR -->|"device"| Device
+    end
 ```
 
 ---
@@ -53,6 +53,29 @@ To ensure that telemonitoring results become part of the longitudinal patient re
 ## 3. Mapping from Proprietary TMP JSON to FHIR Document
 
 The Belgian Telemonitoring Project (TMP) transmits proprietary JSON messages between device vendors, monitoring apps, and hospital platforms. Below is the normative transformation into FHIR structures:
+
+```mermaid
+flowchart LR
+    subgraph TMP["<b>Proprietary TMP JSON Message</b>"]
+        direction TB
+        T1["telemonitoringId"]
+        T2["carepath (id, version)"]
+        T3["prescriberApplication"]
+        T4["prescriber (NIHDI)"]
+        T5["patientId (SSIN)"]
+        T6["service (clinical code)"]
+        T7["attachments[] (PDF / URI)"]
+    end
+
+    subgraph FHIR["<b>Belgian Telemonitoring Document Bundle</b>"]
+        direction TB
+        F1["<b>BeTelemonitoringComposition</b><br/>• author: Practitioner(prescriber)<br/>• subject: Patient(patientId)<br/>• type: service (LOINC)"]
+        F2["<b>TelemonitoringDiagnosticReport</b><br/>• ext: telemonitoring-id<br/>• ext: carepath<br/>• ext: prescriber-application<br/>• presentedForm: attachments[]"]
+        F3["<b>Observation & Device</b><br/>• Mean Heart Rate<br/>• Holter Monitoring Device"]
+    end
+
+    TMP -->|"Normative Mapping & Transformation"| FHIR
+```
 
 | Proprietary TMP JSON Field | Target FHIR Element | FHIR Datatype & Profile |
 | :--- | :--- | :--- |
@@ -64,8 +87,6 @@ The Belgian Telemonitoring Project (TMP) transmits proprietary JSON messages bet
 | `service` / clinical code | `Composition.type` & `DiagnosticReport.code` | `CodeableConcept` (LOINC / SNOMED) |
 | `attachments[].uri` | `DiagnosticReport.presentedForm[].url` | `Attachment.url` |
 | `attachments[].contentType`| `DiagnosticReport.presentedForm[].contentType` | `Attachment.contentType` (`application/pdf`) |
-| `attachments[].contentMD5`| `DiagnosticReport.presentedForm[].hash` | `Attachment.hash` (Base64) |
-| `attachments[].contentLength`| `DiagnosticReport.presentedForm[].size` | `Attachment.size` |
 
 ---
 

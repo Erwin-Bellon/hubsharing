@@ -36,6 +36,8 @@ pages:
     title: Belgian Interhub FHIR Document Sharing Guide
   architecture.md:
     title: Architecture & Interhub Ecosystem
+  resource-considerations.md:
+    title: Design Rationale (Why FHIR Documents)
   envelope-and-metadata.md:
     title: Envelope & Metadata Specification
   transactions.md:
@@ -43,32 +45,37 @@ pages:
   security.md:
     title: Interhub Security & Authentication Architecture
   end-to-end-encryption.md:
-    title: Architectural Discussion on End-to-End Encryption
-  mapping-kmehr-to-hub.md:
-    title: KMEHR to FHIR MHD Mapping Matrix
-  ehds-alignment.md:
-    title: European Health Data Space (EHDS) Alignment
+    title: End-to-End Encryption (Discussion Paper)
   lab-report-sharing.md:
     title: Laboratory Report Document Sharing (LabReport)
   mapping-telemonitoring-to-hub.md:
     title: Telemonitoring Document Sharing
-  resource-considerations.md:
-    title: Architectural & Resource Rationale
   tmp-base-message.md:
-    title: TMP Base Message Reference
+    title: TMP Base Message (Telemonitoring Appendix)
+  mapping-kmehr-to-hub.md:
+    title: KMEHR to FHIR MHD Mapping Matrix
+  ehds-alignment.md:
+    title: European Health Data Space (EHDS) Alignment
 
+# Menu groups mirror the reading order documented in index.md §3.
+# Each group is a complete topic; pages inside a group are ordered by dependency.
 menu:
   Home: index.html
-  Architecture: architecture.html
-  Envelope & Metadata: envelope-and-metadata.html
-  Transactions: transactions.html
-  Security: security.html
-  E2EE Discussion: end-to-end-encryption.html
-  KMEHR Mapping: mapping-kmehr-to-hub.html
-  EHDS Alignment: ehds-alignment.html
-  Lab Reports: lab-report-sharing.html
-  Telemonitoring: mapping-telemonitoring-to-hub.html
-  Rationale: resource-considerations.html
+  Architecture:
+    Architecture & Federation Model: architecture.html
+    Design Rationale: resource-considerations.html
+  Specification:
+    Envelope & Metadata: envelope-and-metadata.html
+    Transactions: transactions.html
+    Security & Authentication: security.html
+    End-to-End Encryption (Discussion): end-to-end-encryption.html
+  Document Types:
+    Laboratory Reports: lab-report-sharing.html
+    Telemonitoring: mapping-telemonitoring-to-hub.html
+    TMP Base Message: tmp-base-message.html
+  Migration & Alignment:
+    KMEHR to FHIR Mapping: mapping-kmehr-to-hub.html
+    EHDS Alignment: ehds-alignment.html
   Artifacts: artifacts.html
 
 instanceOptions:

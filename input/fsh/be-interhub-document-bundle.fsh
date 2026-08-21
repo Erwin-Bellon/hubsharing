@@ -80,7 +80,7 @@ Description: "Root Composition resource for Belgian Laboratory Report Document B
 
 * custodian 0..1 MS
 * custodian only Reference(Organization)
-* custodian ^short = "Custodian laboratory or hospital organization"
+* custodian ^short = "Custodian hub source organization (laboratory, hospital, pharmacy, care home, ...)"
 
 * section 1..* MS
 * section ^short = "Sections containing laboratory findings, specialty panels, and observations"

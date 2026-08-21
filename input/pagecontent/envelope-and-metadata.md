@@ -1,15 +1,21 @@
 # Document Envelope & Metadata Specification
 
+> **Where this page sits in the guide** — *Specification*, page 1 of 4. This page is the **single source of truth for `BeInterhubDocumentReference`**. Every other page that mentions a metadata field, extension or identifier links back here instead of restating it.
+>
+> * **Owned by this page:** all `DocumentReference` elements, the four Belgian extensions (`homeCommunityId`, `patientAccess`, `endToEndEncryption`, `recordDateTime`), and the UTC normalization rule.
+> * **Not covered here:** how the envelope is queried and returned → [Transactions](transactions.html); who may call and how the call is authenticated → [Security & Authentication](security.html); whether the payload behind `content.attachment.url` should itself be encrypted → [End-to-End Encryption](end-to-end-encryption.html); the KMEHR / XDS.b origin of each field → [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html).
+> * **Previous:** [Design Rationale](resource-considerations.html) · **Next:** [Transactions](transactions.html)
+
 ## 1. Overview of the Metadata Model
 
-In the Belgian Interhub ecosystem, document discovery is strictly separated from document retrieval. When querying for available health records (`getTransactionList`), client applications receive a lightweight metadata envelope: the **`BeInterhubDocumentReference`**.
+In the Belgian Interhub ecosystem, document discovery is strictly separated from document retrieval — the reasoning behind that separation is recorded in [Design Rationale §3](resource-considerations.html#3-the-role-of-documentreference-as-discovery-envelope). When querying for available health records (`getTransactionList`, specified in [Transactions §2](transactions.html#2-transaction-1-gettransactionlist-mhd-iti-67-find-documentreferences)), client applications receive a lightweight metadata envelope: the **`BeInterhubDocumentReference`**.
 
 ```mermaid
 classDiagram
     class BeInterhubDocumentReference {
         +masterIdentifier: Identifier (RFC 3986 URI)
         +identifier[uniqueId]: Identifier (RFC 3986 URI)
-        +identifier[localId]: Identifier (Local Vault ID)
+        +identifier[localId]: Identifier (Local Hub Source ID)
         +status: code (current | superseded)
         +docStatus: code (preliminary | final | amended)
         +category: CD-TRANSACTION (labresult, telemonitoring, sumehr)
@@ -49,7 +55,7 @@ classDiagram
 
     class AuthorList {
         +author[0]: Regional Hub (Organization)
-        +author[1]: Originating Hospital (Organization)
+        +author[1]: Originating Hub Source (Organization)
         +author[2]: Authoring Physician (Practitioner)
     }
 
@@ -63,29 +69,33 @@ classDiagram
 
 This metadata envelope provides:
 1. **Clinical Context**: Document category (`CD-TRANSACTION`), precise clinical type (LOINC), clinical encounter period, and confidentiality level.
-2. **Author & Institutional Attribution**: Answering hub, originating hospital, and authoring healthcare practitioner.
+2. **Author & Institutional Attribution**: Answering hub, originating hub source organisation, and authoring healthcare practitioner.
 3. **Retrieval & Routing Endpoints**: The exact RESTful URL to fetch the full FHIR Document Bundle (`type = #document`), accompanied by the repository Home Community ID.
 4. **Technical Payload Characteristics**: MIME content type (`application/fhir+json`), document language, and format specification code.
 5. **Belgian Governance & Access Rules**: Granular patient portal access permissions, release dates, and end-to-end encryption metadata.
+
+Filled-in examples of this envelope for each supported document type are given in [Laboratory Reports §4](lab-report-sharing.html#4-metadata-mapping-for-gettransactionlist-mhd-iti-67) and [Telemonitoring §4](mapping-telemonitoring-to-hub.html#4-metadata-mapping-for-gettransactionlist-mhd-iti-67).
 
 ---
 
 ## 2. Element-by-Element Specification (`BeInterhubDocumentReference`)
 
+Every row below is normative for Belgian Interhub exchanges. The legacy KMEHR and IHE XDS.b counterpart of each element — and the transformation logic between them — is listed in [KMEHR to FHIR Mapping §2](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix); the search parameters that can be used against these elements are in [Transactions §2.2](transactions.html#22-http-interaction--query-parameters).
+
 | Element | Card. | Type | Description & Belgian Mapping Rule |
 | :--- | :--- | :--- | :--- |
 | **`masterIdentifier`** | `0..1` | `Identifier` | Globally unique master identifier for this version of the document, formatted as an RFC 3986 URI (e.g., `urn:oid:1.3.6.1.4.1.21297.100.2.1.815933567` or `urn:uuid:...`). |
 | **`identifier[uniqueId]`** | `1..1` | `Identifier` | Universal document entry identifier. Must use `system = "urn:ietf:rfc:3986"`. Directly maps to `XDSDocumentEntry.uniqueId` and KMEHR `transactionSummary/id`. |
-| **`identifier[localId]`** | `0..*` | `Identifier` | Local identifier assigned by the originating hospital vault or laboratory system (e.g. `LAB-2026-03-815933567`). |
+| **`identifier[localId]`** | `0..*` | `Identifier` | Local identifier assigned by the originating hub source system (hospital EHR, laboratory information system, practice software, …) (e.g. `LAB-2026-03-815933567`). |
 | **`status`** | `1..1` | `code` | Metadata lifecycle status: `current` (approved and active), `superseded` (replaced by a newer version), or `entered-in-error`. |
 | **`docStatus`** | `0..1` | `code` | Clinical status of the underlying document: `preliminary`, `final`, `amended`. Mapped from KMEHR `iscomplete` / `isvalidated`. |
 | **`category[cdTransaction]`** | `1..1` | `CodeableConcept` | Document category coded using the Belgian `CD-TRANSACTION` code system (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction`, OID `1.3.6.1.4.1.21297.100.3.1`). Examples: `sumehr`, `labresult`, `discharge`, `telemonitoring`, `note`, `referral`. |
 | **`type`** | `1..1` | `CodeableConcept` | Precise clinical document type. Must use LOINC (e.g., `11502-2` for Laboratory Report, `10185-7` for Holter Study, `34133-9` for Summarization of Episode) or Belgian clinical type codes. |
 | **`subject`** | `1..1` | `Reference(Patient)` | Reference to the patient. The referenced Patient resource must contain the official Belgian Social Security Identification Number (**SSIN / INSS**). |
 | **`date`** | `1..1` | `instant` | Timestamp when the document metadata entry was created/indexed, standardized in **UTC (Z)** format (ISO 8601 `YYYY-MM-DDThh:mm:ssZ`). |
-| **`author`** | `1..*` | `Reference(...)` | Sequence of authors. In Belgian Hub rules, author references follow a specific order of granularity: (1) Answering Hub, (2) Originating Hospital / Institution, (3) Authoring Practitioner / Physician. |
+| **`author`** | `1..*` | `Reference(...)` | Sequence of authors. In Belgian Hub rules, author references follow a specific order of granularity: (1) Answering Hub, (2) Originating Hub Source Organisation, (3) Authoring Practitioner / Physician. |
 | **`authenticator`** | `0..1` | `Reference(...)` | Healthcare professional or organization legally validating/attesting the document. |
-| **`custodian`** | `0..1` | `Reference(Organization)` | Organization responsible for the long-term maintenance of the document record (e.g., hospital vault). |
+| **`custodian`** | `0..1` | `Reference(Organization)` | Organization responsible for the long-term maintenance of the document record (e.g. the hub source organisation). |
 | **`relatesTo`** | `0..*` | `BackboneElement` | Explicit relationships to previous documents (e.g., `replaces` for amended documents, `appends` for addenda). |
 | **`description`** | `0..1` | `string` | UTF-8 human-readable document title or caption (e.g., *"Comprehensive Blood Biochemistry and Hematology Laboratory Report"*). |
 | **`securityLabel`** | `0..*` | `CodeableConcept` | Confidentiality classification from HL7 v3 Confidentiality (`N` = Normal, `R` = Restricted, `V` = Very Restricted / Secret). |
@@ -105,11 +115,13 @@ This metadata envelope provides:
 ### 3.1 Home Community ID (`BeExtHomeCommunityId`)
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-home-community-id` (or `urn:ihe:iti:xds:2023:homeCommunityId`)
 * **Cardinality**: `1..1` (Mandatory for Interhub exchanges)
-* **Value**: `uri` (e.g., `urn:oid:1.3.6.1.4.1.21297.1.3` for CoZo, `urn:oid:1.3.6.1.4.1.21297.1.1` for RSB)
-* **Purpose**: Identifies the regional hub responsible for managing the document. Essential for cross-community federation, allowing initiating gateways to route retrieve calls to the correct responding hub.
+* **Value**: `uri` (e.g., `urn:oid:1.3.6.1.4.1.21297.1.3` for CoZo, `urn:oid:1.3.6.1.4.1.21297.1.1` for BHN)
+* **Purpose**: Identifies the regional hub responsible for managing the document. Essential for cross-community federation, allowing initiating gateways to route retrieve calls to the correct responding hub. The routing mechanics that consume this value are described in [Architecture §3.2](architecture.html#32-routing-mechanics-via-homecommunityid), and its role in the multi-hub model versus the single-NCP European model in [EHDS Alignment §3.1](ehds-alignment.html#3-belgian-advancements-beyond-baseline-ehds).
 
 ### 3.2 Belgian Patient Access Metadata (`BeExtPatientAccess`)
 In the Belgian healthcare system, patients have a legal right to access their medical records via certified national/regional portals (e.g. MaSanté / MijnGezondheid). However, physicians may withhold or delay document release under specific clinical circumstances (therapeutic exception or pending consultation).
+
+This extension *carries* the rule; enforcing it is the initiating hub's responsibility, as set out in [Security & Authentication §1.1](security.html#11-trust-model-access-control-is-the-initiating-hubs-responsibility). How it is applied at the European border is described in [EHDS Alignment §3.2](ehds-alignment.html#32-granular-patient-access-governance-beextpatientaccess).
 
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-patient-access`
 * **Sub-extensions**:
@@ -121,6 +133,8 @@ In the Belgian healthcare system, patients have a legal right to access their me
   3. `deniedReason` (`string`, `0..1`): Textual explanation why the document is withheld from the patient (applicable when `access = no` or `never`).
 
 ### 3.3 End-to-End Encryption Metadata (`BeExtEndToEndEncryption`)
+This extension only *declares* that a payload is encrypted and for whom. Whether Belgium should encrypt FHIR payloads at all, which mechanism to use (JWE or CMS), and the tiered strategy this IG recommends are discussed in [End-to-End Encryption](end-to-end-encryption.html#5-recommended-strategic-solution-the-tiered-hybrid-architecture); the transport-level security that applies to every exchange regardless is specified in [Security & Authentication](security.html).
+
 For cross-enterprise transmissions requiring application-level encryption:
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-end-to-end-encryption`
 * **Sub-extensions**:
@@ -129,11 +143,11 @@ For cross-enterprise transmissions requiring application-level encryption:
   3. `applicationId` (`string`, `0..1`): Specific IT application identifier registered in the eHealth ETK depot.
   4. `keyId` (`string`, `0..1`): Encryption Token Key (ETK) identifier.
 
-### 3.4 Source Vault Recording Timestamp (`BeExtRecordDateTime`)
+### 3.4 Source System Recording Timestamp (`BeExtRecordDateTime`)
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-record-datetime`
 * **Cardinality**: `0..1`
 * **Value**: `instant` (UTC ISO 8601)
-* **Purpose**: Records the exact timestamp when the document was persisted in the originating hospital vault (corresponds to KMEHR `recorddatetime`).
+* **Purpose**: Records the exact timestamp when the document was persisted in the originating hub source system (corresponds to KMEHR `recorddatetime`).
 
 ---
 
@@ -144,3 +158,13 @@ In KMEHR messages, dates and times are often transmitted with local Belgian offs
 1. Concatenate date and time strings.
 2. Apply the correct seasonal timezone offset.
 3. Standardize into **UTC ISO 8601 (`YYYY-MM-DDThh:mm:ssZ`)**.
+
+The full set of KMEHR-to-FHIR transformation rules this normalization belongs to is specified in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix).
+
+---
+
+## Continue reading
+
+* **Previous:** [Design Rationale](resource-considerations.html) — why discovery metadata is decoupled from the payload.
+* **Next:** [Transactions](transactions.html) — how this envelope is searched (ITI-67) and how the payload it points to is retrieved (ITI-68).
+* **Related:** [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix) for the legacy origin of every element; [Laboratory Reports](lab-report-sharing.html#4-metadata-mapping-for-gettransactionlist-mhd-iti-67) and [Telemonitoring](mapping-telemonitoring-to-hub.html#4-metadata-mapping-for-gettransactionlist-mhd-iti-67) for filled-in examples; [End-to-End Encryption](end-to-end-encryption.html) for the debate behind the `BeExtEndToEndEncryption` extension.

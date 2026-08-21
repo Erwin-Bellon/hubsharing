@@ -1,6 +1,8 @@
-# TMP Message Example
+# TMP Base Message (Telemonitoring Source Example)
 
-The resources and transformations in this IG start from a basic JSON message that pushes telemonitoring information from a provider to a hospital (or another consumer). 
+> **Where this page sits in the guide** — *Document Types*, appendix to [Telemonitoring](mapping-telemonitoring-to-hub.html). It shows the raw TMP JSON message that the telemonitoring transformation starts from. The normative field-by-field mapping is in [Telemonitoring §3](mapping-telemonitoring-to-hub.html#3-mapping-from-proprietary-tmp-json-to-fhir-document), and the resulting document bundle in [Telemonitoring §5](mapping-telemonitoring-to-hub.html#5-complete-json-document-walkthrough).
+
+The resources and transformations in this IG start from a basic JSON message that pushes telemonitoring information from a provider to a hub source (a hospital, home-care organisation, practice, …) or another consumer. 
 
 ```mermaid
 flowchart LR
@@ -58,3 +60,10 @@ This is an example of a message that can be sent by a provider:
   "patientAuthenticationUrl": ""
 }
 ```
+
+---
+
+## Continue reading
+
+* **Back to:** [Telemonitoring](mapping-telemonitoring-to-hub.html) — the normative transformation of this message into a FHIR document bundle.
+* **Related:** [Artifacts](artifacts.html) for the `TelemonitoringId`, `Carepath` and `PrescriberApplication` extensions referenced above.

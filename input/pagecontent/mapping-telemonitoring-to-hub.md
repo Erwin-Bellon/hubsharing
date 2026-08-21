@@ -1,10 +1,16 @@
 # Telemonitoring Document Sharing (Remote Patient Monitoring)
 
+> **Where this page sits in the guide** — *Document Types*, page 2 of 2. Same structure as [Laboratory Reports](lab-report-sharing.html): one concrete payload end to end, using the envelope and transactions specified earlier in the guide.
+>
+> * **Read first:** [Envelope & Metadata](envelope-and-metadata.html) and [Transactions](transactions.html). The raw source message this transformation starts from is shown in [TMP Base Message](tmp-base-message.html).
+> * **Owned by this page:** the telemonitoring document architecture (`BeTelemonitoringComposition`, `TelemonitoringDiagnosticReport`), the TMP JSON → FHIR mapping, and a complete worked JSON example.
+> * **Previous:** [Laboratory Reports](lab-report-sharing.html) · **Next:** [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html)
+
 ## 1. Overview & Business Context
 
 In the Belgian healthcare landscape, telemonitoring (remote patient monitoring - TMP) is expanding rapidly across chronic care programs, post-discharge tracking, cardiology (e.g. ambulatory Holter monitoring), diabetes care, and oncology. Telemonitoring platforms collect continuous and episodic sensor data, patient-reported outcome measures (PROMs), and automated diagnostic evaluations.
 
-To ensure that telemonitoring results become part of the longitudinal patient record accessible to all treating physicians across the Belgian federated hubs (CoZo, RSW, RSB, Zodap), telemonitoring data is published as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** categorized under `CD-TRANSACTION` code `telemonitoring`.
+To ensure that telemonitoring results become part of the longitudinal patient record accessible to all treating physicians across the Belgian federated hubs (CoZo, RSW, BHN, Zodap — see [Architecture §1](architecture.html#1-the-belgian-federated-health-ecosystem)), telemonitoring data is published as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** categorized under `CD-TRANSACTION` code `telemonitoring`. The document-bundle paradigm is justified in [Design Rationale](resource-considerations.html#2-evaluation-of-evaluated-carrier-paradigms) and constrained normatively in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document).
 
 ---
 
@@ -52,7 +58,7 @@ flowchart TD
 
 ## 3. Mapping from Proprietary TMP JSON to FHIR Document
 
-The Belgian Telemonitoring Project (TMP) transmits proprietary JSON messages between device vendors, monitoring apps, and hospital platforms. Below is the normative transformation into FHIR structures:
+The Belgian Telemonitoring Project (TMP) transmits proprietary JSON messages between device vendors, monitoring apps, and hub source platforms (hospitals, home-care organisations, monitoring centres) — a complete example of such a source message is shown in [TMP Base Message](tmp-base-message.html). Below is the normative transformation into FHIR structures:
 
 ```mermaid
 flowchart LR
@@ -92,7 +98,7 @@ flowchart LR
 
 ## 4. Metadata Mapping for `getTransactionList` (MHD ITI-67)
 
-When published to the regional hub, the telemonitoring session is discoverable via `BeInterhubDocumentReference`:
+When published to the regional hub, the telemonitoring session is discoverable via `BeInterhubDocumentReference`. Only the telemonitoring-specific *values* are given here; the cardinality and meaning of each element are specified in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), and the search that returns it in [Transactions §2](transactions.html#2-transaction-1-gettransactionlist-mhd-iti-67-find-documentreferences):
 
 * `category`: `https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring`
 * `type`: `http://loinc.org#10185-7` ("Holter study")
@@ -307,3 +313,11 @@ Below is a complete, valid example of a shared Telemonitoring FHIR Document Bund
   ]
 }
 ```
+
+---
+
+## Continue reading
+
+* **Previous:** [Laboratory Reports](lab-report-sharing.html) — the same pattern applied to laboratory results.
+* **Next:** [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html) — the migration crosswalk for existing KMEHR connectors.
+* **Related:** [TMP Base Message](tmp-base-message.html) for the raw source message; [Envelope & Metadata](envelope-and-metadata.html) and [Transactions](transactions.html) for the envelope and calls used above; [Artifacts](artifacts.html) for the telemonitoring profiles and extensions.

@@ -1,10 +1,17 @@
 # Laboratory Report Document Sharing (LabReport)
 
+> **Where this page sits in the guide** — *Document Types*, page 1 of 2. This page shows **one concrete payload end to end**; it deliberately does not restate the envelope or the transactions, it only gives the laboratory-specific values for them.
+>
+> * **Read first:** [Envelope & Metadata](envelope-and-metadata.html) and [Transactions](transactions.html).
+> * **Owned by this page:** the laboratory document architecture (`BeInterhubLabComposition`), LOINC section codes per laboratory specialty, and a complete worked JSON example.
+> * **Related:** EU lab profile alignment → [EHDS Alignment](ehds-alignment.html#21-profile-alignment-matrix); legacy `labresult` KMEHR transactions → [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html).
+> * **Previous:** [End-to-End Encryption](end-to-end-encryption.html) · **Next:** [Telemonitoring](mapping-telemonitoring-to-hub.html)
+
 ## 1. Overview & Business Context
 
-Laboratory test results represent one of the highest-volume document categories in the Belgian healthcare ecosystem. In legacy KMEHR exchanges, laboratory reports were transmitted under the `CD-TRANSACTION` code `labresult`, often embedding structured KMEHR `<item>` elements or base64-encoded PDF/text files.
+Laboratory test results represent one of the highest-volume document categories in the Belgian healthcare ecosystem. In legacy KMEHR exchanges, laboratory reports were transmitted under the `CD-TRANSACTION` code `labresult`, often embedding structured KMEHR `<item>` elements or base64-encoded PDF/text files (the full legacy crosswalk, including the `CD-TRANSACTION` value set, is in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#3-code-system--value-set-crosswalks)).
 
-Under the modernized Interhub FHIR specification, all laboratory reports are published and shared as **self-contained FHIR Document Bundles (`Bundle.type = #document`)**. This specification directly integrates the work of **HL7 Belgium (`BeLaboratoryReport`)**, the Belgian **DIGIRELAB Phase 3** initiative, and the **EHDS EU Laboratory Report (`Composition-eu-lab`)** standard.
+Under the modernized Interhub FHIR specification, all laboratory reports are published and shared as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** — a paradigm justified in [Design Rationale](resource-considerations.html#2-evaluation-of-evaluated-carrier-paradigms) and constrained normatively in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document). This specification directly integrates the work of **HL7 Belgium (`BeLaboratoryReport`)**, the Belgian **DIGIRELAB Phase 3** initiative, and the **EHDS EU Laboratory Report (`Composition-eu-lab`)** standard — the profile-by-profile correspondence with the European specifications is in [EHDS Alignment §2.1](ehds-alignment.html#21-profile-alignment-matrix).
 
 ---
 
@@ -83,7 +90,7 @@ Sections within the Composition organize results by medical laboratory specialty
 
 ## 4. Metadata Mapping for `getTransactionList` (MHD ITI-67)
 
-When the laboratory document is indexed in the hub registry, the corresponding `BeInterhubDocumentReference` is populated:
+When the laboratory document is indexed in the hub registry, the corresponding `BeInterhubDocumentReference` is populated as follows. Only the laboratory-specific *values* are given here; the cardinality and meaning of each element are specified in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), and the search that returns it in [Transactions §2](transactions.html#2-transaction-1-gettransactionlist-mhd-iti-67-find-documentreferences):
 
 * `category`: `https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#labresult`
 * `type`: `http://loinc.org#11502-2`
@@ -375,3 +382,11 @@ Below is a complete, valid example of a shared Laboratory Report FHIR Document B
   ]
 }
 ```
+
+---
+
+## Continue reading
+
+* **Previous:** [End-to-End Encryption](end-to-end-encryption.html) — whether this payload travels in plaintext (Tier 1) or encrypted (Tier 2).
+* **Next:** [Telemonitoring](mapping-telemonitoring-to-hub.html) — the second document type, structured the same way.
+* **Related:** [Envelope & Metadata](envelope-and-metadata.html) and [Transactions](transactions.html) for the envelope and calls used above; [EHDS Alignment](ehds-alignment.html#21-profile-alignment-matrix) for `Composition-eu-lab` conformance; [Artifacts](artifacts.html) for the machine-readable profiles and examples.

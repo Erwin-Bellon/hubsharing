@@ -1,5 +1,11 @@
 # Interhub Transactions: getTransactionList & getTransaction
 
+> **Where this page sits in the guide** — *Specification*, page 2 of 4. This page is the **wire-level contract**: URLs, parameters, status codes and response shapes.
+>
+> * **Owned by this page:** `getTransactionList` (ITI-67), `getTransaction` (ITI-68), partial-failure `OperationOutcome` handling, and the error-code crosswalk.
+> * **Not covered here:** the fields of the `DocumentReference` returned by ITI-67 → [Envelope & Metadata](envelope-and-metadata.html); how the calling hub is authenticated and the request is tamper-proofed → [Security & Authentication](security.html); what a real payload looks like per domain → [Laboratory Reports](lab-report-sharing.html) and [Telemonitoring](mapping-telemonitoring-to-hub.html); why the payload is a document bundle at all → [Design Rationale](resource-considerations.html).
+> * **Previous:** [Envelope & Metadata](envelope-and-metadata.html) · **Next:** [Security & Authentication](security.html)
+
 ## 1. Overview of Interhub Transactions
 
 The Belgian federated hub architecture relies on two core document-sharing interactions:
@@ -13,6 +19,8 @@ In the modernized FHIR-based Belgian Interhub standard, these legacy SOAP operat
 | **`getTransactionList`** | **MHD ITI-67** (`Find DocumentReferences`) | `GET [base]/DocumentReference` (RESTful Search) | `Bundle` (type = `searchset`) containing `BeInterhubDocumentReference` entries |
 | **`getTransaction`** | **MHD ITI-68** (`Retrieve Document`) / `$document` | `GET [base]/Bundle/[id]` or `GET [base]/Composition/[id]/$document` | Complete `BeInterhubDocumentBundle` (type = `document`) |
 
+The resource returned by ITI-67 is specified field by field in [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference). The resource returned by ITI-68 is a `BeInterhubDocumentBundle`, whose per-domain content is specified in [Laboratory Reports](lab-report-sharing.html) and [Telemonitoring](mapping-telemonitoring-to-hub.html). The legacy SOAP operations in the left-hand column are crosswalked in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html).
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -20,14 +28,14 @@ sequenceDiagram
     participant EHR as EHR / Consumer App
     participant Hub as Belgian Regional Hub (Responder)
     participant Metahub as National Metahub / Other Hubs
-    participant Vault as Hospital Document Repository
+    participant Source as Hub Source (Hospital / Lab / Practice)
 
     Note over EHR,Hub: Phase 1: Document Discovery (getTransactionList / ITI-67)
     Clinician->>EHR: Query documents for Patient (SSIN)
     EHR->>Hub: GET /DocumentReference?patient.identifier=ssin|...&category=...
     opt Federated Cross-Hub Query
         Hub->>Metahub: Query Patient-to-Hub Directory
-        Hub->>Vault: Query local DocumentReferences
+        Hub->>Source: Query local DocumentReferences
     end
     Hub-->>EHR: HTTP 200 OK (Bundle type=searchset containing BeInterhubDocumentReference[])
     EHR-->>Clinician: Display Document List (Category, Type, Date, Author, Status)
@@ -35,8 +43,8 @@ sequenceDiagram
     Note over EHR,Hub: Phase 2: Document Retrieval (getTransaction / ITI-68)
     Clinician->>EHR: Select specific document to view
     EHR->>Hub: GET /Bundle/{id} (or DocumentReference.content.attachment.url)
-    Hub->>Vault: Fetch full immutable document payload
-    Vault-->>Hub: Return BeInterhubDocumentBundle
+    Hub->>Source: Fetch full immutable document payload
+    Source-->>Hub: Return BeInterhubDocumentBundle
     Hub-->>EHR: HTTP 200 OK (Bundle type=document with Root Composition + Clinical Resources)
     EHR-->>Clinician: Render narrative sections & discrete data
 ```
@@ -48,14 +56,18 @@ sequenceDiagram
 ### 2.1 Trigger & Scope
 A healthcare professional, clinical application, or regional gateway initiates this transaction to query for health documents available for a patient identified by their Belgian **SSIN / INSS**.
 
+The **initiating hub** performs its access control before emitting this transaction (e.g. by checking the Metahub for an informed consent / therapeutic link, or by consulting its own local database). The answering hub authenticates the calling hub, trusts it, and answers the query. This trust model is only summarised here; it is specified in full — together with the responsibility split between the two hubs — in [Security & Authentication §1.1](security.html#11-trust-model-access-control-is-the-initiating-hubs-responsibility).
+
 ### 2.2 HTTP Interaction & Query Parameters
 
 ```http
 GET [base]/DocumentReference?patient.identifier=https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin|79080412345&category=https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction|labresult&date=ge2026-01-01T00:00:00Z&date=le2026-12-31T23:59:59Z&status=current&_count=50 HTTP/1.1
 Host: hub.cozo.be
 Accept: application/fhir+json
-Authorization: Bearer <eHealth-OAuth-Token>
+Authorization: Bearer <calling-hub-authentication-token>
 ```
+
+The `Authorization: Bearer` token above is obtained through one of the three connection routes specified in [Security & Authentication §2](security.html#2-the-three-authentication--connection-routes-proposal); every request additionally carries DPoP or RFC 9421 tamper-proofing headers ([§3](security.html#3-replay-attack-prevention--query-tamper-proofing-dpop-rfc-9449--rfc-9421)).
 
 #### Supported Search Parameters:
 
@@ -71,12 +83,16 @@ Authorization: Bearer <eHealth-OAuth-Token>
 | **`_count`** *(Optional)* | `integer` | `maxrows` | Maximum number of results requested per page. |
 | **`_sort`** *(Optional)* | `string` (`-date`, `date`) | Order of results | Defaults to descending by creation date (`-date`). |
 
+The *KMEHR Concept* column above is a pointer, not the full crosswalk: the complete bi-directional field mapping is in [KMEHR to FHIR Mapping §2](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix), and the elements being searched are defined in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference).
+
 ### 2.3 Response Structure (`Bundle` type = `searchset`)
 
 The answering hub returns an **HTTP 200 OK** with a FHIR `Bundle` of type `searchset`:
 * `Bundle.total`: Total number of matching document entries.
 * `Bundle.entry[]`: Array of matching `BeInterhubDocumentReference` resources.
 * If no matching documents exist, an empty searchset Bundle is returned (`total = 0`, `entry = []`).
+
+Each entry conforms to `BeInterhubDocumentReference`; refer to [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference) for the meaning and cardinality of the elements shown in the example below, and to [§3.1](envelope-and-metadata.html#31-home-community-id-beexthomecommunityid) to [§3.4](envelope-and-metadata.html#34-source-system-recording-timestamp-beextrecorddatetime) for its extensions.
 
 ```json
 {
@@ -175,7 +191,7 @@ The answering hub returns an **HTTP 200 OK** with a FHIR `Bundle` of type `searc
 
 ### 2.4 Downstream System Unavailability, Partial Failures & OperationOutcome Handling
 
-In a federated healthcare ecosystem, executing a document discovery query (`getTransactionList` / MHD ITI-67) requires the responding eHealth Hub to query numerous underlying clinical repositories, hospital EHR vaults, private laboratory information systems (LIS), and remote partner hubs.
+In a federated healthcare ecosystem, executing a document discovery query (`getTransactionList` / MHD ITI-67) requires the responding eHealth Hub to query numerous underlying hub sources — hospital EHRs, independent laboratory information systems (LIS), pharmacy and practice software, care homes — and remote partner hubs.
 
 In real-world operations, one or more connected downstream systems may be temporarily unavailable—for instance, undergoing scheduled maintenance, experiencing network partition, or failing to respond within configured SLA timeout windows.
 
@@ -186,17 +202,17 @@ sequenceDiagram
     participant Gateway as Answering eHealth Hub (Gateway)
     participant Lab1 as Lab Repository A (Active)
     participant Lab2 as Lab Repository B (Timeout)
-    participant VaultC as Hospital Vault C (Maintenance)
+    participant SrcC as Hub Source C — Retirement Home (Maintenance)
 
     Clinician->>Gateway: GET /DocumentReference?patient.identifier=ssin|79080412345
     par Federated Fan-out Queries
         Gateway->>Lab1: Query documents for patient
         Gateway->>Lab2: Query documents for patient
-        Gateway->>VaultC: Query documents for patient
+        Gateway->>SrcC: Query documents for patient
     end
     Lab1-->>Gateway: 200 OK (2 DocumentReferences found)
     Note over Lab2,Gateway: ⚠️ Connection Timeout (SLA exceeded)
-    VaultC-->>Gateway: ⚠️ HTTP 503 Service Unavailable (Maintenance)
+    SrcC-->>Gateway: ⚠️ HTTP 503 Service Unavailable (Maintenance)
 
     Note over Gateway: Merges available DocumentReferences<br/>Constructs OperationOutcome for failed systems<br/>Sets search.mode = #outcome
     Gateway-->>Clinician: HTTP 200 OK (Bundle type=searchset)<br/>• entry[0..1]: DocumentReference (search.mode = match)<br/>• entry[2]: OperationOutcome (search.mode = outcome)
@@ -218,7 +234,7 @@ Each failing or timed-out downstream system generates an entry in the `Operation
 | `OperationOutcome.issue` Field | Value / Datatype | Description & Usage |
 | :--- | :--- | :--- |
 | **`severity`** | `code` (`warning` \| `information`) | Fixed to `warning` for partial failures where other document records are returned. |
-| **`code`** | `code` (`timeout` \| `transient` \| `exception` \| `suppressed`) | `timeout`: Downstream system exceeded SLA response time.<br>`transient`: System down for maintenance (HTTP 503).<br>`exception`: Unexpected internal subsystem error.<br>`suppressed`: Records withheld due to patient consent or link policies. |
+| **`code`** | `code` (`timeout` \| `transient` \| `exception` \| `suppressed`) | `timeout`: Downstream system exceeded SLA response time.<br>`transient`: System down for maintenance (HTTP 503).<br>`exception`: Unexpected internal subsystem error.<br>`suppressed`: Downstream system returned a partial result set for its own local reasons. |
 | **`details`** | `CodeableConcept` | Standard issue type from `http://terminology.hl7.org/CodeSystem/issue-type` with a human-readable text description. |
 | **`diagnostics`** | `string` | Diagnostic text explicitly identifying the failing repository/system (including NIHDI license, CBE number, or URI) and stating that records from that location could not be included. |
 
@@ -319,7 +335,7 @@ Below is a complete example of an HTTP 200 OK searchset response containing two 
               ],
               "text": "Downstream system unavailable (maintenance)"
             },
-            "diagnostics": "Connected hospital vault (NIHDI: 72000034) is currently unavailable due to scheduled maintenance. Historical documents from this facility are temporarily excluded."
+            "diagnostics": "Connected hub source (NIHDI: 72000034) is currently unavailable due to scheduled maintenance. Historical documents from this organisation are temporarily excluded."
           }
         ]
       }
@@ -343,14 +359,14 @@ Consuming EHR systems, clinical portals, and mobile applications consuming `getT
 ## 3. Transaction 2: `getTransaction` (MHD ITI-68 `Retrieve Document`)
 
 ### 3.1 Trigger & Scope
-Triggered when a consumer selects a document from the search results to view or import the full clinical payload.
+Triggered when a consumer selects a document from the search results to view or import the full clinical payload. As with ITI-67, the access decision was already taken by the initiating hub; the responding hub authenticates the calling hub, serves the payload, and logs the retrieval.
 
 ### 3.2 HTTP Interaction
 
 ```http
 GET https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01 HTTP/1.1
 Accept: application/fhir+json
-Authorization: Bearer <eHealth-OAuth-Token>
+Authorization: Bearer <calling-hub-authentication-token>
 ```
 
 Alternatively, servers may support the FHIR `$document` operation on the Composition resource:
@@ -395,6 +411,8 @@ flowchart TD
 * **Narrative Requirement (`Composition.section.text`)**: In accordance with FHIR and Belgian clinical safety guidelines, every section MUST include human-readable XHTML narrative (`status = #generated` or `#extensions`), ensuring safe rendering on any clinical workstation.
 * **Completeness**: The document bundle must be **self-contained**. All resources referenced in the Composition sections must be bundled inside the `Bundle.entry` array.
 
+Why documents rather than FHIR messaging or granular resource access: [Design Rationale](resource-considerations.html#2-evaluation-of-evaluated-carrier-paradigms). Complete worked payloads for both supported document types: [Laboratory Reports §5](lab-report-sharing.html#5-complete-json-document-walkthrough) and [Telemonitoring §5](mapping-telemonitoring-to-hub.html#5-complete-json-document-walkthrough).
+
 ---
 
 ## 4. Error Codes & Exception Crosswalk
@@ -402,9 +420,17 @@ flowchart TD
 | KMEHR SOAP Fault / Exception | HTTP Status | FHIR `OperationOutcome.issue.code` | Remediation / Clinical Context |
 | :--- | :--- | :--- | :--- |
 | **`Invalid patient identifier`** | `400 Bad Request` | `value` / `invalid` | The supplied SSIN is malformed or checksum failed. |
-| **`Therapeutic link does not exist`** | `403 Forbidden` | `forbidden` / `security` | Requesting practitioner does not have an active therapeutic link with the patient. |
-| **`National consent missing`** | `403 Forbidden` | `suppressed` | Patient has not given consent to share health records via the eHealth platform. |
-| **`Document withheld by physician`** | `403 Forbidden` | `forbidden` | Patient access is withheld (`PatientAccess = no` or `never`). |
+| **`Unauthenticated / untrusted calling hub`** | `401 Unauthorized` / `403 Forbidden` | `security` | The calling hub could not be authenticated (invalid mTLS certificate, token signature, or tamper-proofing header). |
 | **`No transaction found with provided id`** | `404 Not Found` | `not-found` | The requested document uniqueId does not exist in the repository. |
 | **`Owner outside of network`** | `502 Bad Gateway` | `exception` | The target repository or home community is unreachable. |
 | **`Technical error`** | `500 Internal Error` | `transient` / `exception` | Internal repository failure. |
+
+The `401` / `403` conditions above are raised by the authentication and tamper-proofing layer specified in [Security & Authentication](security.html#2-the-three-authentication--connection-routes-proposal); note in particular that a responding hub never refuses on access-control grounds such as "no therapeutic link" ([Security & Authentication §4](security.html#4-division-of-responsibility-between-initiating-and-responding-hub)). Partial downstream failures are *not* errors and are handled as described in [§2.4](#24-downstream-system-unavailability-partial-failures--operationoutcome-handling) above.
+
+---
+
+## Continue reading
+
+* **Previous:** [Envelope & Metadata](envelope-and-metadata.html) — the `BeInterhubDocumentReference` returned by `getTransactionList`.
+* **Next:** [Security & Authentication](security.html) — how the calling hub is authenticated, how requests are protected against replay and tampering, and how each of these transactions is audited.
+* **Related:** [Laboratory Reports](lab-report-sharing.html#5-complete-json-document-walkthrough) and [Telemonitoring](mapping-telemonitoring-to-hub.html#5-complete-json-document-walkthrough) for complete ITI-68 payloads; [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html) for the SOAP operations these transactions replace.

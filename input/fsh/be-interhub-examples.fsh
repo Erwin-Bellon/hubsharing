@@ -333,7 +333,7 @@ Usage: #example
 Instance: OutcomePartialFailureExample
 InstanceOf: OperationOutcome
 Title: "OperationOutcome: Partial Downstream Failure"
-Description: "Example OperationOutcome returned inside a searchset Bundle when one or more connected downstream systems (such as a laboratory or hospital vault) fail to respond or time out during getTransactionList."
+Description: "Example OperationOutcome returned inside a searchset Bundle when one or more connected downstream hub sources (such as a laboratory, hospital, pharmacy or care home system) fail to respond or time out during getTransactionList."
 Usage: #example
 * issue[0].severity = #warning
 * issue[0].code = #timeout
@@ -344,7 +344,7 @@ Usage: #example
 * issue[1].code = #transient
 * issue[1].details.coding[0] = http://terminology.hl7.org/CodeSystem/issue-type#transient "Transient Issue"
 * issue[1].details.text = "Downstream system unavailable (maintenance)"
-* issue[1].diagnostics = "Connected hospital vault (NIHDI: 72000034) is currently unavailable due to scheduled maintenance. Historical documents from this facility are temporarily excluded."
+* issue[1].diagnostics = "Connected hub source (NIHDI: 72000034) is currently unavailable due to scheduled maintenance. Historical documents from this organisation are temporarily excluded."
 
 Instance: BundleTransactionListResponseExample
 InstanceOf: Bundle

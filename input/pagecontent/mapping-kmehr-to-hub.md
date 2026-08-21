@@ -1,5 +1,11 @@
 # KMEHR to FHIR MHD Interhub Mapping Matrix
 
+> **Where this page sits in the guide** — *Migration & Alignment*, page 1 of 2. This is the crosswalk that makes the dual-stack gateway of [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase) implementable. Read it when you are migrating an existing KMEHR connector, not when you are learning the target model.
+>
+> * **Owned by this page:** KMEHR ↔ IHE XDS.b ↔ FHIR field mappings, code-system crosswalks, and the KMEHR encapsulation strategy for the transition period.
+> * **The target definitions live elsewhere:** the FHIR elements in the right-hand columns are specified in [Envelope & Metadata](envelope-and-metadata.html); the SOAP operations being replaced are specified in [Transactions](transactions.html).
+> * **Previous:** [Telemonitoring](mapping-telemonitoring-to-hub.html) · **Next:** [EHDS Alignment](ehds-alignment.html)
+
 ## 1. Executive Summary & Mapping Scope
 
 This specification provides the normative, bi-directional mapping between legacy Belgian **KMEHR** XML messages (used in SOAP Interhub Web Services such as `getTransactionList` and `getTransaction`), intermediate **IHE XDS.b / XCA** constructs, and the target **HL7® FHIR® R4 / IHE MHD** profiles.
@@ -43,6 +49,8 @@ The mapping encompasses:
 2. **Payload Encapsulation Mapping**: KMEHR `<folder>/<transaction>` $\longleftrightarrow$ `BeInterhubDocumentBundle` (`Bundle.type = #document`).
 3. **Terminology & Code System Crosswalks**: Belgian national code tables (`CD-TRANSACTION`, `CD-HCPARTY`, `CD-CONFIDENTIALITY`, `CD-SEX`).
 
+This page maps *between* representations; it does not define the target. The FHIR elements in the right-hand columns below are specified in [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), the RESTful operations replacing the SOAP services in [Transactions](transactions.html), and the runtime component that applies these mappings — the dual-stack gateway — in [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase).
+
 ---
 
 ## 2. Master Metadata Mapping Matrix
@@ -50,9 +58,9 @@ The mapping encompasses:
 | Concept | KMEHR Schema Element (`getTransactionList` / `getTransaction`) | IHE XDS.b ebXML RIM 3.0 Attribute / Slot | FHIR MHD (`BeInterhubDocumentReference`) Element | FHIR Datatype & Syntax | Transformation Logic & Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Document Unique ID** | `transaction/id[@S="ID-KMEHR"]`<br>or `transactionSummary/id` | `XDSDocumentEntry.uniqueId` (`externalIdentifier` `urn:uuid:2e82c1f6...`) | `masterIdentifier`<br>and `identifier[uniqueId]` | `Identifier` (`system = "urn:ietf:rfc:3986"`) | Prefix with `urn:oid:` or `urn:uuid:` to form a valid RFC 3986 URI. |
-| **Local Repository ID** | `transaction/id[@SL]` or source local ID | Local entry ID in repository | `identifier[localId]` | `Identifier` | Internal hospital vault record number. |
+| **Local Repository ID** | `transaction/id[@SL]` or source local ID | Local entry ID in repository | `identifier[localId]` | `Identifier` | Internal record number in the hub source system. |
 | **Home Community ID** | Metahub header `hub/id` or `id[@SL]` | `XDSDocumentEntry.homeCommunityId` (`ExtrinsicObject/@home`) | `extension[homeCommunityId]` | `Extension(valueUri)` | Registered Hub OID as URI (e.g. `urn:oid:1.3.6.1.4.1.21297.1.3`). Mandatory for cross-hub routing. |
-| **Repository Unique ID** | Routing key / Repository OID | `XDSDocumentEntry.repositoryUniqueId` (`Slot name="repositoryUniqueId"`) | `custodian.identifier` | `Identifier` | Identifies the physical hospital repository (`1.3.6.1.4.1.21297.100.2.X`). |
+| **Repository Unique ID** | Routing key / Repository OID | `XDSDocumentEntry.repositoryUniqueId` (`Slot name="repositoryUniqueId"`) | `custodian.identifier` | `Identifier` | Identifies the physical repository of the hub source (`1.3.6.1.4.1.21297.100.2.X`). |
 | **Patient Identifier (SSIN)** | `folder/patient/id[@S="INSS"]` | `XDSDocumentEntry.patientId` (`externalIdentifier` `urn:uuid:58a7...`) | `subject` $\rightarrow$ `Patient.identifier` | `Identifier` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"` and `value = INSS`. |
 | **Patient Demographics** | `folder/patient/familyname`<br>`folder/patient/firstname`<br>`folder/patient/birthdate`<br>`folder/patient/sex/cd` | `XDSDocumentEntry.sourcePatientInfo` (`Slot name="sourcePatientInfo"` PID lines) | `subject` $\rightarrow$ `Patient` resource | `Resource(Patient)` | Maps name, birthDate, gender (`male`/`female`), and address lines. |
 | **Document Category** | `transaction/cd[@S="CD-TRANSACTION"]`<br>(e.g. `sumehr`, `labresult`, `discharge`) | `XDSDocumentEntry.classCode` (`Classification` `urn:uuid:41a5...`) | `category[cdTransaction]` | `CodeableConcept` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction"` and `code = transaction/cd`. |
@@ -64,13 +72,13 @@ The mapping encompasses:
 | **Service Period Start** | `transaction/begindate` & `begintime` | `XDSDocumentEntry.serviceStartTime` (`Slot name="serviceStartTime"`) | `context.period.start` | `dateTime` | Timestamp when medical encounter or monitoring started. |
 | **Service Period End** | `transaction/enddate` & `endtime` | `XDSDocumentEntry.serviceStopTime` (`Slot name="serviceStopTime"`) | `context.period.end` | `dateTime` | Timestamp when medical encounter or monitoring ended. |
 | **Authoring Hub** | Answering Hub identifier in `header/sender` | First `authorInstitution` in XDS | `author[0]` $\rightarrow$ `Organization` | `Reference(Organization)` | Regional hub answering the request (e.g. CoZo). |
-| **Authoring Hospital** | `author/hcparty` where `cd="orghospital"` | `authorInstitution` (HL7 v2 XON) | `author[1]` $\rightarrow$ `Organization` | `Reference(Organization)` | Hospital institution NIHDI (`100.11.1`) and CBE (`100.11.2`). |
+| **Authoring Source Organisation** | `author/hcparty` where `cd` is an organisation type (`orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgretirementhome`, …) | `authorInstitution` (HL7 v2 XON) | `author[1]` $\rightarrow$ `Organization` | `Reference(Organization)` | Hub source organisation NIHDI (`100.11.1`) and CBE (`100.11.2`). |
 | **Authoring Practitioner** | `author/hcparty` where `cd="persphysician"` | `authorPerson` (HL7 v2 XCN) | `author[2]` $\rightarrow$ `Practitioner` | `Reference(Practitioner)` | Physician NIHDI (`100.9.1`) and full name. |
 | **Confidentiality Code** | `transaction/confidentiality/cd` | `XDSDocumentEntry.confidentialityCode` (`Classification` `urn:uuid:f4f8...`) | `securityLabel` | `CodeableConcept` | `normal` $\rightarrow$ `N`, `restricted` $\rightarrow$ `R`, `secret` $\rightarrow$ `V`. |
 | **Patient Access Permission** | `transaction/cd[@SL="PatientAccess"]` | Local patient access classification | `extension[patientAccess].access` | `code` (`yes` \| `no` \| `never`) | Patient portal visibility permission. |
 | **Patient Access Release Date** | `transaction/cd[@SL="PatientAccessDate"]` | Local patient release date slot | `extension[patientAccess].accessDate` | `date` | Date after which patient may view the document. |
 | **Patient Access Denied Reason** | `transaction/cd[@SL="PatientAccessDeniedReasonForPatient"]` | Local withholding explanation slot | `extension[patientAccess].deniedReason` | `string` | Clinical justification for withholding record. |
-| **Source Vault Timestamp** | `transaction/recorddatetime` | Source registration timestamp slot | `extension[recordDateTime]` | `instant` (ISO 8601 UTC) | Persist date/time in source vault. |
+| **Source Recording Timestamp** | `transaction/recorddatetime` | Source registration timestamp slot | `extension[recordDateTime]` | `instant` (ISO 8601 UTC) | Persist date/time in the hub source system. |
 | **MIME Content Type** | `transaction/lnk/@TYPE` | `ExtrinsicObject/@mimeType` | `content.attachment.contentType` | `code` | **`application/fhir+json`** (for FHIR Document Bundles). |
 | **Document Format Code** | Schema namespace / transaction format | `XDSDocumentEntry.formatCode` | `content.format` | `Coding` | Coded format URI (e.g. `urn:be:fgov:ehealth:lab:document:1.0`). |
 | **Retrieval URL Endpoint** | Internal repository locator | Repository URL endpoint | `content.attachment.url` | `url` | RESTful endpoint to retrieve the `BeInterhubDocumentBundle`. |
@@ -95,17 +103,19 @@ The mapping encompasses:
 
 ### 3.2 Confidentiality: `CD-CONFIDENTIALITY` $\longleftrightarrow$ HL7 v3 Confidentiality
 
-| KMEHR Confidentiality Value | HL7 v3 Code | Display | Belgian Access Policy |
+These labels are carried as metadata and are interpreted by the **initiating hub**, which owns the access decision; a responding hub returns the label as published and does not enforce it on the initiating hub's behalf.
+
+| KMEHR Confidentiality Value | HL7 v3 Code | Display | Belgian Access Policy (applied by the initiating hub) |
 | :--- | :--- | :--- | :--- |
-| `normal` / (omitted) | `N` | Normal | Accessible to all healthcare professionals with a valid therapeutic link. |
-| `restricted` | `R` | Restricted | Accessible only to authorized specialty care providers or explicit therapeutic links. |
-| `secret` | `V` | Very Restricted | Sealed document; accessible only by the original author and authorized delegates. |
+| `normal` / (omitted) | `N` | Normal | No additional restriction beyond the initiating hub's standard access control. |
+| `restricted` | `R` | Restricted | The initiating hub restricts disclosure to specialty care providers / explicit therapeutic links. |
+| `secret` | `V` | Very Restricted | Sealed document; the initiating hub restricts disclosure to the original author and their delegates. |
 
 ---
 
 ## 4. Encapsulation Strategy: FHIR Document inside KMEHR (Transition Phase)
 
-During the migration period, legacy systems unable to process native RESTful FHIR interactions can receive FHIR Document Bundles encapsulated inside standard KMEHR messages via `<lnk>` multimedia elements:
+During the migration period, legacy systems unable to process native RESTful FHIR interactions can receive FHIR Document Bundles encapsulated inside standard KMEHR messages via `<lnk>` multimedia elements. This is the payload direction of the dual-stack gateway described in [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase); the encapsulated bundle itself is a normal `BeInterhubDocumentBundle` as specified in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document):
 
 ```xml
 <transaction>
@@ -131,3 +141,11 @@ During the migration period, legacy systems unable to process native RESTful FHI
     </lnk>
 </transaction>
 ```
+
+---
+
+## Continue reading
+
+* **Previous:** [Telemonitoring](mapping-telemonitoring-to-hub.html) — the second of the two document types being mapped.
+* **Next:** [EHDS Alignment](ehds-alignment.html) — the outward-facing equivalent of this page: how the Belgian model maps onto European cross-border profiles.
+* **Related:** [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase) for the gateway that applies these mappings at runtime; [Envelope & Metadata](envelope-and-metadata.html) for the normative definition of every target element; [Transactions §4](transactions.html#4-error-codes--exception-crosswalk) for the SOAP fault to HTTP status crosswalk.

@@ -78,8 +78,8 @@ Description: "Metadata required for retrieving the recipient's encryption token 
 // -------------------------------------------------------------------------
 Extension: BeExtRecordDateTime
 Id: be-ext-record-datetime
-Title: "Source Vault Recording Timestamp"
-Description: "The exact date and time when the transaction was recorded in the originating hospital vault or source system (corresponds to KMEHR recorddatetime)."
+Title: "Source System Recording Timestamp"
+Description: "The exact date and time when the transaction was recorded in the originating hub source system (corresponds to KMEHR recorddatetime)."
 * ^status = #active
 * ^context[0].type = #element
 * ^context[0].expression = "DocumentReference"

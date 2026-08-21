@@ -1,5 +1,11 @@
 # Architectural Discussion: End-to-End Encryption (E2EE) in FHIR Interhub Sharing
 
+> **Where this page sits in the guide** — *Specification*, page 4 of 4. **This page is a discussion paper, not a normative specification.** It answers a single open question: should Belgium keep KMEHR-style payload encryption in the FHIR world? The security that *is* normative today — TLS 1.3 / mTLS, hub authentication, tamper-proofing and auditing — is specified in [Security & Authentication](security.html).
+>
+> * **Owned by this page:** the ETEE / ETK background, the JWE and CMS payload-encryption options, the trade-off analysis, and the recommended tiered hybrid strategy.
+> * **Related, specified elsewhere:** the metadata extension that flags an encrypted payload → [Envelope & Metadata](envelope-and-metadata.html#33-end-to-end-encryption-metadata-beextendtoendencryption); transport and hub authentication → [Security & Authentication](security.html); the cross-border consequences → [EHDS Alignment](ehds-alignment.html#33-end-to-end-application-encryption-etee--etk-depot).
+> * **Previous:** [Security & Authentication](security.html) · **Next:** [Laboratory Reports](lab-report-sharing.html)
+
 ## 1. Executive Summary & Discussion Context
 
 In the legacy Belgian **KMEHR** ecosystem, **End-to-End Encryption (ETEE)** was a defining architectural feature for sensitive clinical data exchange. When sending medical transactions across regional hubs or via the eHealthBox, the originating system encrypted the `<folder>` payload using the recipient's public key retrieved from the national **eHealth ETK (Encryption Token Key) Depot**. Regional hubs and the Metahub acted as "zero-knowledge" routing brokers, inspecting only the unencrypted XML `<header>` and `<transactionSummary>` while remaining incapable of reading the underlying clinical content.
@@ -15,7 +21,7 @@ As Belgium transitions to **HL7® FHIR® R4** and the **IHE MHD** profile family
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Sender as Originating Hospital / HCP
+    participant Sender as Originating Hub Source / HCP
     participant ETK as eHealth ETK Depot
     participant Hub as Regional Hub / Metahub (Zero-Knowledge Broker)
     participant Receiver as Receiving Physician / EHR
@@ -29,6 +35,8 @@ sequenceDiagram
     Hub-->>Receiver: 7. Return KMEHR Message Envelope
     Note over Receiver: 8. Decrypt AES key via private key on eID/token<br/>9. Decrypt <folder> XML clinical payload
 ```
+
+The KMEHR structures named in this flow (`<header>`, `<folder>`, `<transactionSummary>`) are mapped to their FHIR counterparts in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix).
 
 ---
 
@@ -54,7 +62,7 @@ flowchart TD
 In a FHIR-native environment, JWE provides an elegant, JSON-based payload encryption standard:
 1. The originating system serializes the complete FHIR Document Bundle (`Bundle.type = #document`).
 2. The JSON string is encrypted into a **JWE (RFC 7516)** compact or general JSON serialization using AES-GCM (e.g. `A256GCM`) with the recipient's public key (RSA-OAEP-256 or ECDH-ES) fetched from the eHealth ETK depot.
-3. The encrypted JWE is stored as a FHIR **`Binary`** resource (`contentType = application/jose`) or embedded inside the `BeInterhubDocumentReference.content.attachment.data`.
+3. The encrypted JWE is stored as a FHIR **`Binary`** resource (`contentType = application/jose`) or embedded inside the `BeInterhubDocumentReference.content.attachment.data` (element specified in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference)).
 
 #### Structure in `BeInterhubDocumentReference`:
 ```json
@@ -122,14 +130,14 @@ Alternatively, the FHIR Document Bundle is encoded into a standard ASN.1 Cryptog
 
 ## 4. Architectural Analysis: Should Belgium Continue E2EE in FHIR?
 
-To make an informed national decision, we must evaluate the trade-offs between **Zero-Knowledge Payload Encryption** and **Transport-Layer Security (TLS 1.3 / mTLS) + Authorization Layer Controls**:
+To make an informed national decision, we must evaluate the trade-offs between **Zero-Knowledge Payload Encryption** and **Transport-Layer Security (TLS 1.3 / mTLS) between mutually trusted hubs**:
 
-| Dimension | Model A: E2EE Payload Encryption (KMEHR / JWE Zero-Knowledge) | Model B: Transport Security (mTLS) + OAuth 2.0 (Standard FHIR/EHDS) |
+| Dimension | Model A: E2EE Payload Encryption (KMEHR / JWE Zero-Knowledge) | Model B: Transport Security (mTLS + authenticated hubs) (Standard FHIR/EHDS) |
 | :--- | :--- | :--- |
 | **1. Intermediary Hub Trust** | Zero-knowledge; hubs cannot read data | Hubs can process plaintext data |
 | **2. Search & Indexing** | Metadata only; no payload querying | Deep querying on Observations |
 | **3. Clinical Decision Support** | Impossible at hub/gateway level | Fully supported |
-| **4. Multi-Disciplinary Care** | High complexity (multi-key management) | Simple (Role & link-based auth) |
+| **4. Multi-Disciplinary Care** | High complexity (multi-key management) | Simple (handled locally by the initiating hub) |
 | **5. EHDS Cross-Border Interop** | Incompatible without central decrypt | 100% natively compatible |
 | **6. Tooling & Ecosystem** | Requires custom cryptographic plugins | Standard FHIR parsers & apps |
 
@@ -141,7 +149,7 @@ To make an informed national decision, we must evaluate the trade-offs between *
 
 2. **The "Care Team" Multi-Recipient Dilemma**:
    * KMEHR ETEE worked well for point-to-point mailings (eHealthBox doctor-to-doctor).
-   * However, Hub document sharing serves **multidisciplinary care teams**, hospital departments, covering physicians, and emergency rooms.
+   * However, Hub document sharing serves **multidisciplinary care teams**, departments and services across every kind of hub source, covering physicians, and emergency rooms.
    * Encrypting a document at publish time requires knowing *every future clinician* who might need to view it—which is impossible for emergency care.
 
 3. **European Health Data Space (EHDS) Incompatibility**:
@@ -162,7 +170,7 @@ flowchart TD
     subgraph Strategy["<b>Tiered Hybrid Security Strategy</b>"]
         direction TB
         subgraph Tier1["<b>TIER 1: DEFAULT (General Interhub Sharing - 95%+ volume)</b>"]
-            T1["• <b>Payload</b>: Plaintext FHIR Document Bundle (Bundle.type = #document)<br/>• <b>Security</b>: TLS 1.3 / mTLS + OAuth 2.0 / eHealth IAM + AuditEvent logging<br/>• <b>Capabilities</b>: Full hub indexing, DIGIRELAB observation search, EHDS cross-border interoperability<br/>• <b>Use Cases</b>: Lab results, telemonitoring, discharge summaries, SUMEHRs"]
+            T1["• <b>Payload</b>: Plaintext FHIR Document Bundle (Bundle.type = #document)<br/>• <b>Security</b>: TLS 1.3 / mTLS + authenticated calling hub + AuditEvent logging<br/>• <b>Capabilities</b>: Full hub indexing, DIGIRELAB observation search, EHDS cross-border interoperability<br/>• <b>Use Cases</b>: Lab results, telemonitoring, discharge summaries, SUMEHRs"]
         end
         subgraph Tier2["<b>TIER 2: HIGH-SENSITIVITY / SEALED RECORDS (Targeted Exchanges)</b>"]
             T2["• <b>Payload</b>: JWE-Encrypted FHIR Document Bundle (contentType: application/jose)<br/>• <b>Metadata</b>: BeInterhubDocumentReference with BeExtEndToEndEncryption extension<br/>• <b>Security</b>: Asymmetric recipient ETK encryption (zero-knowledge payload)<br/>• <b>Use Cases</b>: Psychiatric evaluations, occupational health, genetics, sealed records"]
@@ -171,6 +179,16 @@ flowchart TD
 ```
 
 1. **Tier 1 (General Exchange - 95%+ of volume)**:
-   * Laboratory results, telemonitoring summaries, discharge letters, and SUMEHRs are exchanged as **plaintext FHIR Document Bundles** over mutually authenticated, encrypted TLS 1.3 connections. Access is strictly controlled by eHealth IAM OAuth tokens, therapeutic link verification, and comprehensive IHE BALP audit logging. This unlocks full clinical querying, AI-assisted decision support, and EHDS cross-border exchange.
+   * Laboratory results, telemonitoring summaries, discharge letters, and SUMEHRs are exchanged as **plaintext FHIR Document Bundles** over mutually authenticated, encrypted TLS 1.3 connections between trusted hubs, with comprehensive IHE BALP audit logging on both sides. Access control itself is performed by the initiating hub before the request is emitted. This unlocks full clinical querying, AI-assisted decision support, and EHDS cross-border exchange.
 2. **Tier 2 (Sensitive / Sealed Consultations)**:
    * For highly sensitive documents intended strictly for a named individual or confidential department, systems use **JWE payload encryption** with the recipient's ETK key. The `BeInterhubDocumentReference` provides the unencrypted discovery metadata, while the `content.attachment.url` delivers the encrypted JWE payload.
+
+In both tiers the transport and authentication layer is the one specified in [Security & Authentication](security.html); a Tier 2 document additionally carries the `BeExtEndToEndEncryption` extension specified in [Envelope & Metadata §3.3](envelope-and-metadata.html#33-end-to-end-encryption-metadata-beextendtoendencryption). Documents intended for cross-border exchange should stay in Tier 1 — see [EHDS Alignment §3.3](ehds-alignment.html#33-end-to-end-application-encryption-etee--etk-depot).
+
+---
+
+## Continue reading
+
+* **Previous:** [Security & Authentication](security.html) — the normative security layer (mTLS, hub authentication, tamper-proofing, auditing) that this discussion sits on top of.
+* **Next:** [Laboratory Reports](lab-report-sharing.html) — the first of the two document types, and a Tier 1 payload in the strategy recommended above.
+* **Related:** [Envelope & Metadata §3.3](envelope-and-metadata.html#33-end-to-end-encryption-metadata-beextendtoendencryption) for the `BeExtEndToEndEncryption` extension used by Tier 2; [EHDS Alignment §3.3](ehds-alignment.html#33-end-to-end-application-encryption-etee--etk-depot) for the cross-border impact; [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html) for the legacy structures described in §2.

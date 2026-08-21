@@ -17,7 +17,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * extension[homeCommunityId] ^short = "Home Community ID of the regional hub hosting the document"
 * extension[patientAccess] ^short = "Patient access and visibility metadata"
 * extension[endToEndEncryption] ^short = "ETK depot encryption endpoint metadata (if payload is end-to-end encrypted)"
-* extension[recordDateTime] ^short = "Timestamp when the document was recorded in the source vault"
+* extension[recordDateTime] ^short = "Timestamp when the document was recorded in the hub source system"
 
 // Document Identifiers
 * masterIdentifier 0..1 MS
@@ -35,7 +35,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * identifier[uniqueId].system = "urn:ietf:rfc:3986" (exactly)
 * identifier[uniqueId].value 1..1 MS
 
-* identifier[localId] ^short = "Source repository / hospital internal identifier"
+* identifier[localId] ^short = "Hub source internal identifier (hospital EHR, LIS, practice software, ...)"
 * identifier[localId].system 1..1 MS
 * identifier[localId].value 1..1 MS
 
@@ -78,7 +78,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 // Authors & Organizations
 * author 1..* MS
 * author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient)
-* author ^short = "Sequence of document authors. In Belgian Hub rules: first author represents the answering/originating hub/hospital, followed by the healthcare practitioner"
+* author ^short = "Sequence of document authors. In Belgian Hub rules: first author represents the answering hub / originating hub source organisation, followed by the healthcare practitioner"
 
 * authenticator 0..1 MS
 * authenticator only Reference(Practitioner or PractitionerRole or Organization)
@@ -86,7 +86,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 
 * custodian 0..1 MS
 * custodian only Reference(Organization)
-* custodian ^short = "Custodian organization responsible for document maintenance (e.g. hospital or repository)"
+* custodian ^short = "Custodian organization responsible for document maintenance (e.g. the hub source organisation or its repository)"
 
 * relatesTo 0..* MS
 * relatesTo ^short = "Relationship to other documents (replaces, transforms, appends)"

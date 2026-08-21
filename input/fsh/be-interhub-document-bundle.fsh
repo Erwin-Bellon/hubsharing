@@ -64,8 +64,12 @@ Description: "Root Composition resource for Belgian Laboratory Report Document B
 * date ^short = "Document composition date/time"
 
 * author 1..* MS
-* author only Reference(Practitioner or PractitionerRole or Organization or Device)
-* author ^short = "Authoring laboratory, laboratory physician, or device"
+* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient or RelatedPerson)
+* author ^short = "Authoring laboratory, laboratory physician, device or other CD-HCPARTY party"
+* author ^definition = "Author(s) of the laboratory document. Any KMEHR CD-HCPARTY party type may appear: person types as Practitioner / PractitionerRole, organisation and department types as Organization, software as Device. The CD-HCPARTY code is carried inline by the hcPartyType extension."
+* author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* author.identifier MS
+* author.display MS
 
 * title 1..1 MS
 * title ^short = "Human-readable title of the laboratory report (e.g. 'Comprehensive Hematology and Biochemistry Report')"
@@ -77,10 +81,16 @@ Description: "Root Composition resource for Belgian Laboratory Report Document B
 * attester.mode MS
 * attester.time MS
 * attester.party MS
+* attester.party.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* attester.party.identifier MS
+* attester.party.display MS
 
 * custodian 0..1 MS
 * custodian only Reference(Organization)
 * custodian ^short = "Custodian hub source organization (laboratory, hospital, pharmacy, care home, ...)"
+* custodian.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* custodian.identifier MS
+* custodian.display MS
 
 * section 1..* MS
 * section ^short = "Sections containing laboratory findings, specialty panels, and observations"
@@ -124,14 +134,20 @@ Description: "Root Composition resource for Belgian Telemonitoring / Remote Pati
 * date ^short = "Document composition date/time"
 
 * author 1..* MS
-* author only Reference(Practitioner or PractitionerRole or Organization or Device)
-* author ^short = "Authoring prescriber, monitoring service, or remote monitoring platform"
+* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient or RelatedPerson)
+* author ^short = "Authoring prescriber, monitoring service, remote monitoring platform or other CD-HCPARTY party"
+* author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* author.identifier MS
+* author.display MS
 
 * title 1..1 MS
 * title ^short = "Human-readable title of the telemonitoring report (e.g. '24-Hour Continuous Holter Monitoring Report')"
 
 * custodian 0..1 MS
 * custodian only Reference(Organization)
+* custodian.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* custodian.identifier MS
+* custodian.display MS
 
 * section 1..* MS
 * section ^short = "Sections containing telemonitoring summaries, diagnostic reports, and observation series"

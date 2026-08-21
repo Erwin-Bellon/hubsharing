@@ -18,6 +18,7 @@ Alias: $BE-NS-CBE = https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem
 Alias: $BE-CS-CD-TRANSACTION = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction
 Alias: $BE-CS-CD-HCPARTY = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-hcparty
 Alias: $BE-CS-CD-HCPARTY-SPEC = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-hcparty-spec
+Alias: $BE-VS-CD-HCPARTY = https://www.ehealth.fgov.be/standards/fhir/core/ValueSet/be-vs-cd-hcparty
 
 // -------------------------------------------------------------------------
 // Belgian OID Roots

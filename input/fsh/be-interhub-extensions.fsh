@@ -87,3 +87,28 @@ Description: "The exact date and time when the transaction was recorded in the o
 * ^context[1].expression = "Composition"
 * value[x] only instant
 * value[x] 1..1
+
+// -------------------------------------------------------------------------
+// Belgian Healthcare Party Type Extension (KMEHR CD-HCPARTY)
+// -------------------------------------------------------------------------
+Extension: BeExtHcPartyType
+Id: be-ext-hcparty-type
+Title: "Belgian Healthcare Party Type (CD-HCPARTY)"
+Description: "Declares the KMEHR CD-HCPARTY type of a party referenced from the metadata envelope (author, authenticator, custodian). It carries the party type inline, next to the reference, so that a consumer can render and filter a search result without resolving the referenced Practitioner / Organization resource. Covers the full CD-HCPARTY table: person types (persphysician, persnurse, ...), organisation types (orghospital, orglaboratory, orgpharmacy, orgretirementhome, ...), department and specialty types (dept...), and application / software parties."
+* ^status = #active
+* ^context[0].type = #element
+* ^context[0].expression = "DocumentReference.author"
+* ^context[1].type = #element
+* ^context[1].expression = "DocumentReference.authenticator"
+* ^context[2].type = #element
+* ^context[2].expression = "DocumentReference.custodian"
+* ^context[3].type = #element
+* ^context[3].expression = "Composition.author"
+* ^context[4].type = #element
+* ^context[4].expression = "Composition.attester.party"
+* ^context[5].type = #element
+* ^context[5].expression = "Composition.custodian"
+* value[x] only Coding
+* value[x] 1..1
+* valueCoding from $BE-VS-CD-HCPARTY (extensible)
+* valueCoding ^short = "KMEHR CD-HCPARTY code of the referenced party (e.g. persphysician, orghospital, orglaboratory, application)"

@@ -45,8 +45,8 @@ flowchart LR
 ```
 
 The mapping encompasses:
-1. **Metadata Envelope Mapping**: `TransactionSummaryType` $\longleftrightarrow$ `XDSDocumentEntry` $\longleftrightarrow$ `BeInterhubDocumentReference`.
-2. **Payload Encapsulation Mapping**: KMEHR `<folder>/<transaction>` $\longleftrightarrow$ `BeInterhubDocumentBundle` (`Bundle.type = #document`).
+1. **Metadata Envelope Mapping**: `TransactionSummaryType` ↔ `XDSDocumentEntry` ↔ `BeInterhubDocumentReference`.
+2. **Payload Encapsulation Mapping**: KMEHR `<folder>/<transaction>` ↔ `BeInterhubDocumentBundle` (`Bundle.type = #document`).
 3. **Terminology & Code System Crosswalks**: Belgian national code tables (`CD-TRANSACTION`, `CD-HCPARTY`, `CD-CONFIDENTIALITY`, `CD-SEX`).
 
 This page maps *between* representations; it does not define the target. The FHIR elements in the right-hand columns below are specified in [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), the RESTful operations replacing the SOAP services in [Transactions](transactions.html), and the runtime component that applies these mappings — the dual-stack gateway — in [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase).
@@ -61,20 +61,23 @@ This page maps *between* representations; it does not define the target. The FHI
 | **Local Repository ID** | `transaction/id[@SL]` or source local ID | Local entry ID in repository | `identifier[localId]` | `Identifier` | Internal record number in the hub source system. |
 | **Home Community ID** | Metahub header `hub/id` or `id[@SL]` | `XDSDocumentEntry.homeCommunityId` (`ExtrinsicObject/@home`) | `extension[homeCommunityId]` | `Extension(valueUri)` | Registered Hub OID as URI (e.g. `urn:oid:1.3.6.1.4.1.21297.1.3`). Mandatory for cross-hub routing. |
 | **Repository Unique ID** | Routing key / Repository OID | `XDSDocumentEntry.repositoryUniqueId` (`Slot name="repositoryUniqueId"`) | `custodian.identifier` | `Identifier` | Identifies the physical repository of the hub source (`1.3.6.1.4.1.21297.100.2.X`). |
-| **Patient Identifier (SSIN)** | `folder/patient/id[@S="INSS"]` | `XDSDocumentEntry.patientId` (`externalIdentifier` `urn:uuid:58a7...`) | `subject` $\rightarrow$ `Patient.identifier` | `Identifier` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"` and `value = INSS`. |
-| **Patient Demographics** | `folder/patient/familyname`<br>`folder/patient/firstname`<br>`folder/patient/birthdate`<br>`folder/patient/sex/cd` | `XDSDocumentEntry.sourcePatientInfo` (`Slot name="sourcePatientInfo"` PID lines) | `subject` $\rightarrow$ `Patient` resource | `Resource(Patient)` | Maps name, birthDate, gender (`male`/`female`), and address lines. |
+| **Patient Identifier (SSIN)** | `folder/patient/id[@S="INSS"]` | `XDSDocumentEntry.patientId` (`externalIdentifier` `urn:uuid:58a7...`) | `subject` → `Patient.identifier` | `Identifier` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"` and `value = INSS`. |
+| **Patient Demographics** | `folder/patient/familyname`<br>`folder/patient/firstname`<br>`folder/patient/birthdate`<br>`folder/patient/sex/cd` | `XDSDocumentEntry.sourcePatientInfo` (`Slot name="sourcePatientInfo"` PID lines) | `subject` → `Patient` resource | `Resource(Patient)` | Maps name, birthDate, gender (`male`/`female`), and address lines. |
 | **Document Category** | `transaction/cd[@S="CD-TRANSACTION"]`<br>(e.g. `sumehr`, `labresult`, `discharge`) | `XDSDocumentEntry.classCode` (`Classification` `urn:uuid:41a5...`) | `category[cdTransaction]` | `CodeableConcept` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction"` and `code = transaction/cd`. |
 | **Document Type Code** | `transaction/cd[@S="CD-CLINICAL"]` | `XDSDocumentEntry.typeCode` (`Classification` `urn:uuid:f030...`) | `type` | `CodeableConcept` | LOINC code (e.g. `11502-2` for Lab Report, `10185-7` for Holter Study). |
 | **Document Title / Caption** | `transaction/caption`<br>or `transaction/text` | `XDSDocumentEntry.title` (`rim:Name/rim:LocalizedString`) | `description`<br>and `content.attachment.title` | `string` | UTF-8 human-readable document description. |
-| **Document Status** | Document execution status (`iscomplete`, `isvalid`) | `XDSDocumentEntry.availabilityStatus` (`ExtrinsicObject/@status`) | `status` | `code` | Approved $\rightarrow$ `current`<br>Deprecated/Replaced $\rightarrow$ `superseded`. |
-| **Document Lifecycle Status** | `iscomplete="false"` $\rightarrow$ preliminary<br>`isvalidated="true"` $\rightarrow$ final | XDS document lifecycle status | `docStatus` | `code` | `preliminary` \| `final` \| `amended`. |
+| **Document Status** | Document execution status (`iscomplete`, `isvalid`) | `XDSDocumentEntry.availabilityStatus` (`ExtrinsicObject/@status`) | `status` | `code` | Approved → `current`<br>Deprecated/Replaced → `superseded`. |
+| **Document Lifecycle Status** | `iscomplete="false"` → preliminary<br>`isvalidated="true"` → final | XDS document lifecycle status | `docStatus` | `code` | `preliminary` \| `final` \| `amended`. |
 | **Creation Date & Time** | `transaction/date` & `time`<br>or `recorddatetime` | `XDSDocumentEntry.creationTime` (`Slot name="creationTime"`) | `date` | `instant` (ISO 8601 UTC) | Standardized to UTC (`YYYY-MM-DDThh:mm:ssZ`). |
 | **Service Period Start** | `transaction/begindate` & `begintime` | `XDSDocumentEntry.serviceStartTime` (`Slot name="serviceStartTime"`) | `context.period.start` | `dateTime` | Timestamp when medical encounter or monitoring started. |
 | **Service Period End** | `transaction/enddate` & `endtime` | `XDSDocumentEntry.serviceStopTime` (`Slot name="serviceStopTime"`) | `context.period.end` | `dateTime` | Timestamp when medical encounter or monitoring ended. |
-| **Authoring Hub** | Answering Hub identifier in `header/sender` | First `authorInstitution` in XDS | `author[0]` $\rightarrow$ `Organization` | `Reference(Organization)` | Regional hub answering the request (e.g. CoZo). |
-| **Authoring Source Organisation** | `author/hcparty` where `cd` is an organisation type (`orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgretirementhome`, …) | `authorInstitution` (HL7 v2 XON) | `author[1]` $\rightarrow$ `Organization` | `Reference(Organization)` | Hub source organisation NIHDI (`100.11.1`) and CBE (`100.11.2`). |
-| **Authoring Practitioner** | `author/hcparty` where `cd="persphysician"` | `authorPerson` (HL7 v2 XCN) | `author[2]` $\rightarrow$ `Practitioner` | `Reference(Practitioner)` | Physician NIHDI (`100.9.1`) and full name. |
-| **Confidentiality Code** | `transaction/confidentiality/cd` | `XDSDocumentEntry.confidentialityCode` (`Classification` `urn:uuid:f4f8...`) | `securityLabel` | `CodeableConcept` | `normal` $\rightarrow$ `N`, `restricted` $\rightarrow$ `R`, `secret` $\rightarrow$ `V`. |
+| **Authoring Hub** | Answering Hub identifier in `header/sender` | First `authorInstitution` in XDS | `author[0]` → `Organization` | `Reference(Organization)` | Regional hub answering the request (e.g. CoZo). `author[0].extension[hcPartyType]` = `application`. |
+| **Authoring Source Organisation** | `author/hcparty` where `cd` is an organisation type (`orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgretirementhome`, …) | `authorInstitution` (HL7 v2 XON) | `author[1]` → `Organization` | `Reference(Organization)` | Hub source organisation NIHDI (`100.11.1`) and CBE (`100.11.2`), with the organisation's `CD-HCPARTY` code preserved in `author[1].extension[hcPartyType]`. |
+| **Authoring Practitioner** | `author/hcparty` where `cd` is a person type (`persphysician`, `persnurse`, `persdentist`, `persmidwife`, …) | `authorPerson` (HL7 v2 XCN) | `author[2]` → `Practitioner` / `PractitionerRole` | `Reference(Practitioner)` | Practitioner NIHDI (`100.9.1`) and full name, with the person's `CD-HCPARTY` code preserved in `author[2].extension[hcPartyType]`. |
+| **Party Type of any author** | `author/hcparty/cd[@S="CD-HCPARTY"]` (full [healthcare party type table](https://www.ehealth.fgov.be/standards/kmehr/en/tables/healthcare-party-type)) | `authorRole` / `authorSpecialty` slots | `author.extension[hcPartyType]` | `Extension(Coding)` | See [§3.3](#33-healthcare-party-type-cd-hcparty-to-fhir-resources). No party type is lost in translation, and it stays readable without resolving the reference. |
+| **Validating Party** | `transaction/author` with `isvalidated="true"` / KMEHR validator `hcparty` | `XDSDocumentEntry.legalAuthenticator` | `authenticator` (+ `extension[hcPartyType]`) | `Reference(...)` | Any `CD-HCPARTY` person, department or organisation type. |
+| **Document Relationship** | `transaction/id` of the replaced transaction (`transaction/version`, addenda) | `XDSDocumentEntry` association (`RPLC`, `APND`, `XFRM`) | `relatesTo.code` + `relatesTo.target.identifier` | `BackboneElement` | The related document is referenced **by `uniqueId` business identifier**, never by an endpoint URL requiring resolution — see [Envelope & Metadata §4.3](envelope-and-metadata.html#43-logical-references-identifiers-instead-of-round-trips). |
+| **Confidentiality Code** | `transaction/confidentiality/cd` | `XDSDocumentEntry.confidentialityCode` (`Classification` `urn:uuid:f4f8...`) | `securityLabel` | `CodeableConcept` | `normal` → `N`, `restricted` → `R`, `secret` → `V`. |
 | **Patient Access Permission** | `transaction/cd[@SL="PatientAccess"]` | Local patient access classification | `extension[patientAccess].access` | `code` (`yes` \| `no` \| `never`) | Patient portal visibility permission. |
 | **Patient Access Release Date** | `transaction/cd[@SL="PatientAccessDate"]` | Local patient release date slot | `extension[patientAccess].accessDate` | `date` | Date after which patient may view the document. |
 | **Patient Access Denied Reason** | `transaction/cd[@SL="PatientAccessDeniedReasonForPatient"]` | Local withholding explanation slot | `extension[patientAccess].deniedReason` | `string` | Clinical justification for withholding record. |
@@ -87,7 +90,7 @@ This page maps *between* representations; it does not define the target. The FHI
 
 ## 3. Code System & Value Set Crosswalks
 
-### 3.1 Document Category: `CD-TRANSACTION` $\longleftrightarrow$ FHIR Coding
+### 3.1 Document Category: `CD-TRANSACTION` to FHIR Coding
 
 | KMEHR `CD-TRANSACTION` Code | Display Name | Target FHIR `category.coding` |
 | :--- | :--- | :--- |
@@ -101,7 +104,9 @@ This page maps *between* representations; it does not define the target. The FHI
 | `radiology` | Radiology / Imaging Report | `https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#radiology` |
 | `vaccination` | Vaccination Record | `https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#vaccination` |
 
-### 3.2 Confidentiality: `CD-CONFIDENTIALITY` $\longleftrightarrow$ HL7 v3 Confidentiality
+A KMEHR transaction often also carries a **local** category code from the hub source's own catalogue (a second `cd` element, or a `cd` with a local `S`/`SL` scheme). Those local codes are **not dropped** in the FHIR mapping: they are added as additional `coding` entries inside the same `category` `CodeableConcept`, beside the mandatory `CD-TRANSACTION` coding — see [Envelope & Metadata §4.2](envelope-and-metadata.html#42-multiple-codings-national-and-local-codes-for-the-same-concept). The same rule applies to `transaction/cd[@S="CD-CLINICAL"]` and local document-type codes mapping onto `type`.
+
+### 3.2 Confidentiality: `CD-CONFIDENTIALITY` to HL7 v3 Confidentiality
 
 These labels are carried as metadata and are interpreted by the **initiating hub**, which owns the access decision; a responding hub returns the label as published and does not enforce it on the initiating hub's behalf.
 
@@ -110,6 +115,20 @@ These labels are carried as metadata and are interpreted by the **initiating hub
 | `normal` / (omitted) | `N` | Normal | No additional restriction beyond the initiating hub's standard access control. |
 | `restricted` | `R` | Restricted | The initiating hub restricts disclosure to specialty care providers / explicit therapeutic links. |
 | `secret` | `V` | Very Restricted | Sealed document; the initiating hub restricts disclosure to the original author and their delegates. |
+
+### 3.3 Healthcare Party Type: `CD-HCPARTY` to FHIR Resources
+
+KMEHR types every party inline with `hcparty/cd[@S="CD-HCPARTY"]`, covering the complete [healthcare party type table](https://www.ehealth.fgov.be/standards/kmehr/en/tables/healthcare-party-type) — persons, organisations, departments, and software. FHIR splits that information across resource *type* and resource *content*, which is why the Belgian envelope also carries the raw `CD-HCPARTY` code inline in `extension[hcPartyType]`.
+
+| `CD-HCPARTY` class | KMEHR examples | FHIR resource | Where the code is preserved |
+| :--- | :--- | :--- | :--- |
+| Person types (`pers…`) | `persphysician`, `persnurse`, `persdentist`, `perspharmacist`, `persmidwife`, `persphysiotherapist` | `Practitioner` / `PractitionerRole` | `extension[hcPartyType]`, and `PractitionerRole.code` where a role is modelled |
+| Organisation types (`org…`) | `orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgpolyclinic`, `orgretirementhome` | `Organization` | `extension[hcPartyType]`, and `Organization.type` |
+| Department / specialty types (`dept…`) | `deptclinicalbiology`, `deptcardiology`, `deptemergency` | `Organization` (`partOf`) or `PractitionerRole.specialty` | `extension[hcPartyType]` |
+| Application / system parties | `application`, `certificateholder` | `Device` (or `Organization` for a hub) | `extension[hcPartyType]` |
+| Patient / related persons | patient-authored content, informal caregiver | `Patient`, `RelatedPerson` | `extension[hcPartyType]` |
+
+The code system (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-hcparty`) and its 241-concept value set are published by **HL7 Belgium core**, so no Belgian-specific redefinition is needed here. Full element-level detail is in [Envelope & Metadata §3.5](envelope-and-metadata.html#35-healthcare-party-type-beexthcpartytype).
 
 ---
 

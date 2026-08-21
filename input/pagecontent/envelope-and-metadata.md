@@ -18,11 +18,22 @@ classDiagram
         +identifier[localId]: Identifier (Local Hub Source ID)
         +status: code (current | superseded)
         +docStatus: code (preliminary | final | amended)
-        +category: CD-TRANSACTION (labresult, telemonitoring, sumehr)
-        +type: LOINC (e.g. 11502-2, 10185-7)
+        +category: CD-TRANSACTION coding + optional local codings
+        +type: LOINC coding + optional local codings
         +date: instant (UTC ISO 8601)
         +description: string
         +securityLabel: Confidentiality (N, R, V)
+        +relatesTo: replaces | appends | transforms
+    }
+
+    class RelatesToTarget {
+        +identifier: uniqueId of the related document
+        +reference: optional, never required to resolve
+        +display: string
+    }
+
+    class BeExtHcPartyType {
+        +valueCoding: CD-HCPARTY (persphysician, orghospital, ...)
     }
 
     class BeExtHomeCommunityId {
@@ -44,7 +55,7 @@ classDiagram
     class ContentAttachment {
         +contentType: application/fhir+json
         +language: nl-BE | fr-BE | de-BE | en
-        +url: https://hub.../fhir/Bundle/{id}
+        +url: https://hub.../fhir/Bundle/[id]
         +format: Coding (urn:be:fgov:ehealth:...)
         +title: string
     }
@@ -57,6 +68,8 @@ classDiagram
         +author[0]: Regional Hub (Organization)
         +author[1]: Originating Hub Source (Organization)
         +author[2]: Authoring Physician (Practitioner)
+        +identifier: NIHDI / CBE / Hub OID (inline)
+        +display: party name (inline)
     }
 
     BeInterhubDocumentReference *-- BeExtHomeCommunityId : extension
@@ -65,6 +78,8 @@ classDiagram
     BeInterhubDocumentReference *-- ContentAttachment : content.attachment
     BeInterhubDocumentReference --> SubjectPatient : subject
     BeInterhubDocumentReference --> AuthorList : author[]
+    BeInterhubDocumentReference --> RelatesToTarget : relatesTo.target
+    AuthorList *-- BeExtHcPartyType : extension[hcPartyType]
 ```
 
 This metadata envelope provides:
@@ -89,14 +104,14 @@ Every row below is normative for Belgian Interhub exchanges. The legacy KMEHR an
 | **`identifier[localId]`** | `0..*` | `Identifier` | Local identifier assigned by the originating hub source system (hospital EHR, laboratory information system, practice software, …) (e.g. `LAB-2026-03-815933567`). |
 | **`status`** | `1..1` | `code` | Metadata lifecycle status: `current` (approved and active), `superseded` (replaced by a newer version), or `entered-in-error`. |
 | **`docStatus`** | `0..1` | `code` | Clinical status of the underlying document: `preliminary`, `final`, `amended`. Mapped from KMEHR `iscomplete` / `isvalidated`. |
-| **`category[cdTransaction]`** | `1..1` | `CodeableConcept` | Document category coded using the Belgian `CD-TRANSACTION` code system (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction`, OID `1.3.6.1.4.1.21297.100.3.1`). Examples: `sumehr`, `labresult`, `discharge`, `telemonitoring`, `note`, `referral`. |
-| **`type`** | `1..1` | `CodeableConcept` | Precise clinical document type. Must use LOINC (e.g., `11502-2` for Laboratory Report, `10185-7` for Holter Study, `34133-9` for Summarization of Episode) or Belgian clinical type codes. |
-| **`subject`** | `1..1` | `Reference(Patient)` | Reference to the patient. The referenced Patient resource must contain the official Belgian Social Security Identification Number (**SSIN / INSS**). |
+| **`category[cdTransaction]`** | `1..1` | `CodeableConcept` | Document category. The Belgian `CD-TRANSACTION` coding (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction`, OID `1.3.6.1.4.1.21297.100.3.1`) is **mandatory** — examples: `sumehr`, `labresult`, `discharge`, `telemonitoring`, `note`, `referral`. **Additional codings of the same category from other code systems (local hub source catalogues, regional or LOINC/SNOMED CT equivalents) are explicitly allowed in the same `CodeableConcept`** — see [§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept). |
+| **`type`** | `1..1` | `CodeableConcept` | Precise clinical document type. At least one coding SHOULD be LOINC (e.g., `11502-2` for Laboratory Report, `10185-7` for Holter Study, `34133-9` for Summarization of Episode) for EHDS compatibility; Belgian national and local document-type codings MAY be carried alongside it in the same `CodeableConcept` ([§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept)). |
+| **`subject`** | `1..1` | `Reference(Patient)` | Reference to the patient. The referenced Patient resource must contain the official Belgian Social Security Identification Number (**SSIN / INSS**), and `subject.identifier` SHOULD repeat that SSIN inline so that a search result is usable without resolving the reference ([§4.3](#43-logical-references-identifiers-instead-of-round-trips)). |
 | **`date`** | `1..1` | `instant` | Timestamp when the document metadata entry was created/indexed, standardized in **UTC (Z)** format (ISO 8601 `YYYY-MM-DDThh:mm:ssZ`). |
-| **`author`** | `1..*` | `Reference(...)` | Sequence of authors. In Belgian Hub rules, author references follow a specific order of granularity: (1) Answering Hub, (2) Originating Hub Source Organisation, (3) Authoring Practitioner / Physician. |
-| **`authenticator`** | `0..1` | `Reference(...)` | Healthcare professional or organization legally validating/attesting the document. |
-| **`custodian`** | `0..1` | `Reference(Organization)` | Organization responsible for the long-term maintenance of the document record (e.g. the hub source organisation). |
-| **`relatesTo`** | `0..*` | `BackboneElement` | Explicit relationships to previous documents (e.g., `replaces` for amended documents, `appends` for addenda). |
+| **`author`** | `1..*` | `Reference(Practitioner \| PractitionerRole \| Organization \| Device \| Patient \| RelatedPerson)` | Sequence of authors. In Belgian Hub rules, author references follow a specific order of granularity: (1) Answering Hub, (2) Originating Hub Source Organisation, (3) Authoring Practitioner / Physician. **Every KMEHR `CD-HCPARTY` party type can be represented** — see the mapping in [§3.5](#35-healthcare-party-type-beexthcpartytype). Each author carries its `CD-HCPARTY` type inline in `author.extension[hcPartyType]`, its business identifier in `author.identifier`, and its name in `author.display`. |
+| **`authenticator`** | `0..1` | `Reference(Practitioner \| PractitionerRole \| Organization)` | Healthcare party that legally validated / attested the document (KMEHR `isvalidated`). Any `CD-HCPARTY` person, department or organisation type may appear here, typed inline through `authenticator.extension[hcPartyType]` and identified by `authenticator.identifier` (NIHDI / CBE) — [§3.5](#35-healthcare-party-type-beexthcpartytype). |
+| **`custodian`** | `0..1` | `Reference(Organization)` | Organization accountable for the long-term maintenance and availability of the document record. This is a `CD-HCPARTY` **organisation** type — `orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgpolyclinic`, `orgretirementhome`, … — a hospital being only one of them ([Architecture §1.2](architecture.html#12-what-counts-as-a-hub-source)). Typed inline through `custodian.extension[hcPartyType]`, identified by `custodian.identifier` (institution NIHDI or CBE). |
+| **`relatesTo`** | `0..*` | `BackboneElement` | Explicit relationships to previous documents (`replaces` for amended documents, `appends` for addenda, `transforms`). The related document is identified **by business identifier**: `relatesTo.target.identifier` (`system = "urn:ietf:rfc:3986"`) carries the `uniqueId` of the other document and is **mandatory**; a literal `relatesTo.target.reference` is optional and never required for resolution ([§4.3](#43-logical-references-identifiers-instead-of-round-trips)). |
 | **`description`** | `0..1` | `string` | UTF-8 human-readable document title or caption (e.g., *"Comprehensive Blood Biochemistry and Hematology Laboratory Report"*). |
 | **`securityLabel`** | `0..*` | `CodeableConcept` | Confidentiality classification from HL7 v3 Confidentiality (`N` = Normal, `R` = Restricted, `V` = Very Restricted / Secret). |
 | **`content.attachment.contentType`** | `1..1` | `code` | MIME type of the document payload. For Belgian Interhub document sharing, this is **`application/fhir+json`** (or `application/fhir+xml`). Fallback binary formats like `application/pdf` are also supported. |
@@ -149,6 +164,47 @@ For cross-enterprise transmissions requiring application-level encryption:
 * **Value**: `instant` (UTC ISO 8601)
 * **Purpose**: Records the exact timestamp when the document was persisted in the originating hub source system (corresponds to KMEHR `recorddatetime`).
 
+### 3.5 Healthcare Party Type (`BeExtHcPartyType`)
+KMEHR carried the nature of every party inline, in `hcparty/cd[@S="CD-HCPARTY"]`. FHIR normally expresses it on the referenced resource (`Organization.type`, `PractitionerRole.code`), which would force a consumer to resolve every author of every search result just to know whether it is a laboratory, a retirement home or a piece of software. This extension keeps that information **in the envelope**, next to the reference.
+
+* **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-hcparty-type`
+* **Context**: `DocumentReference.author`, `DocumentReference.authenticator`, `DocumentReference.custodian`, `Composition.author`, `Composition.attester.party`, `Composition.custodian`
+* **Cardinality**: `0..1` per referenced party (`MS`)
+* **Value**: `Coding`, bound **extensible** to the Belgian `CD-HCPARTY` value set (`https://www.ehealth.fgov.be/standards/fhir/core/ValueSet/be-vs-cd-hcparty`, 241 codes, published by HL7 Belgium core)
+
+The complete KMEHR [healthcare party type table](https://www.ehealth.fgov.be/standards/kmehr/en/tables/healthcare-party-type) is supported. Each class of `CD-HCPARTY` code maps onto a FHIR resource as follows:
+
+| `CD-HCPARTY` class | Examples | FHIR resource referenced | Identifier used |
+| :--- | :--- | :--- | :--- |
+| **Person types** (`pers…`) | `persphysician`, `persnurse`, `persdentist`, `persmidwife`, `persphysiotherapist`, `perspharmacist` | `Practitioner`, or `PractitionerRole` when the role/qualification matters | Practitioner NIHDI (`1.3.6.1.4.1.21297.100.9.1`), SSIN |
+| **Organisation types** (`org…`) | `orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgpolyclinic`, `orgretirementhome`, `orgprimaryhealthcarecenter` | `Organization` | Institution NIHDI (`100.11.1`), CBE (`100.11.2`) |
+| **Department & specialty types** (`dept…`) | `deptclinicalbiology`, `deptcardiology`, `deptradiology`, `deptemergency` | `Organization` (as `partOf` the parent organisation) or `PractitionerRole.specialty` | Institution NIHDI + local department identifier |
+| **Application / system parties** | `application`, `certificateholder` | `Device` (or `Organization` for the hub itself) | Hub Home Community OID, CBE |
+| **Patient & related persons** | patient as author, informal caregiver | `Patient`, `RelatedPerson` | SSIN |
+
+```json
+"author": [
+  {
+    "extension": [
+      {
+        "url": "https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-hcparty-type",
+        "valueCoding": {
+          "system": "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-hcparty",
+          "code": "orglaboratory",
+          "display": "Independent laboratory"
+        }
+      }
+    ],
+    "reference": "Organization/org-lab-example",
+    "identifier": {
+      "system": "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi",
+      "value": "71000012"
+    },
+    "display": "Klinisch labo Leuven"
+  }
+]
+```
+
 ---
 
 ## 4. Technical Algorithms & Developer Rules
@@ -160,6 +216,70 @@ In KMEHR messages, dates and times are often transmitted with local Belgian offs
 3. Standardize into **UTC ISO 8601 (`YYYY-MM-DDThh:mm:ssZ`)**.
 
 The full set of KMEHR-to-FHIR transformation rules this normalization belongs to is specified in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix).
+
+### 4.2 Multiple Codings: National and Local Codes for the Same Concept
+
+A hub source rarely has only one name for a document. The same discharge report may be `discharge` in `CD-TRANSACTION`, `daghospitalisatieVerslag` in the hospital's own catalogue, and `18842-5` in LOINC. FHIR models this correctly: **one `CodeableConcept` = one concept, carrying as many `Coding` entries as there are code systems that express it.**
+
+**Rule 1 — same concept, several code systems: add codings.** `category[cdTransaction]` and `type` both accept `0..*` additional codings beside the mandatory national one. A hub **MUST NOT** drop local codings when relaying a document to another hub: they are the only way the originating hub source can recognise its own document coming back.
+
+**Rule 2 — different concept: add a separate element.** If the extra code says something else (a second, genuinely different category), it belongs in an additional `category` element, not as an extra coding inside `category[cdTransaction]`.
+
+**Rule 3 — no code at all:** use `category[cdTransaction].text` / `type.text` for the local label; never invent a `CD-TRANSACTION` code that does not exist.
+
+**Rule 4 — searching:** hubs index and match `category` and `type` on **any** coding present. A query on `category=…cd-transaction|discharge` matches the document below, and so does a query on the local system, provided the responding hub knows it.
+
+```json
+"category": [
+  {
+    "coding": [
+      {
+        "system": "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction",
+        "code": "discharge",
+        "display": "Discharge Report"
+      },
+      {
+        "system": "https://uzleuven.be/fhir/CodeSystem/document-category",
+        "code": "daghospitalisatieVerslag",
+        "display": "Daghospitalisatie - ontslagverslag"
+      }
+    ],
+    "text": "Ontslagverslag daghospitalisatie"
+  }
+]
+```
+
+### 4.3 Logical References: Identifiers Instead of Round-Trips
+
+A `getTransactionList` response can hold hundreds of entries. If each entry only carried literal references (`"reference": "Organization/1234"`), a consumer would have to issue one extra request per author, per custodian and per related document, across a federated network of hubs — the classic **N+1 query problem**, with the added cost that the target may live in another hub entirely.
+
+The Belgian Interhub envelope is therefore designed to be **self-sufficient**: every reference in a `BeInterhubDocumentReference` SHOULD carry enough inline data to be displayed, filtered and matched without dereferencing.
+
+| Element | Inline data that MUST/SHOULD be present |
+| :--- | :--- |
+| `subject` | `subject.identifier` = patient SSIN / INSS (SHOULD) |
+| `author` | `author.identifier` (NIHDI / CBE / hub OID), `author.display`, `author.extension[hcPartyType]` (SHOULD) |
+| `authenticator`, `custodian` | `identifier`, `display`, `extension[hcPartyType]` (SHOULD) |
+| `relatesTo.target` | `relatesTo.target.identifier` = `uniqueId` of the related document (**SHALL**, `1..1`) |
+
+For `relatesTo` this is normative rather than advisory: `relatesTo.target.identifier` is mandatory and uses `system = "urn:ietf:rfc:3986"` with the related document's `uniqueId` as value — the very same value a consumer would use in a subsequent `getTransaction` call. A literal `relatesTo.target.reference` MAY be added as a convenience, but a consumer **MUST NOT** be required to dereference it, and a responding hub **MUST NOT** rely on the consumer doing so.
+
+```json
+"relatesTo": [
+  {
+    "code": "replaces",
+    "target": {
+      "identifier": {
+        "system": "urn:ietf:rfc:3986",
+        "value": "urn:oid:1.3.6.1.4.1.21297.100.2.1.815933566"
+      },
+      "display": "Preliminary laboratory report of 2026-03-15 08:40"
+    }
+  }
+]
+```
+
+This is the FHIR-sanctioned *logical reference* pattern (`Reference.identifier` without `Reference.reference`): the relationship is fully expressed by identity, and resolving it is a choice the consumer makes when the user actually asks for the previous version.
 
 ---
 

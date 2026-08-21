@@ -138,8 +138,8 @@ The query syntax for step 1 and the retrieval call for step 2 are specified in [
 
 To enable smooth migration without breaking legacy integrations, Belgian Hubs deploy a **Dual-Stack Mediation Gateway**:
 
-* **Legacy KMEHR Client $\rightarrow$ Modern FHIR Hub**: The gateway receives SOAP `getTransactionList` or `getTransaction` requests, queries the internal FHIR registry/repository via MHD ITI-67 / ITI-68, and transforms the resulting `DocumentReference` and `Bundle (type=document)` back into KMEHR `TransactionSummaryType` or `FolderType` XML.
-* **Modern FHIR Client $\rightarrow$ Legacy KMEHR Hub Source**: The gateway accepts RESTful MHD searches and GET requests, translates them into SOAP KMEHR Web Service calls to legacy hub source systems, transforms the returned KMEHR XML / attachments into standardized FHIR Document Bundles, and returns them to the client.
+* **Legacy KMEHR Client → Modern FHIR Hub**: The gateway receives SOAP `getTransactionList` or `getTransaction` requests, queries the internal FHIR registry/repository via MHD ITI-67 / ITI-68, and transforms the resulting `DocumentReference` and `Bundle (type=document)` back into KMEHR `TransactionSummaryType` or `FolderType` XML.
+* **Modern FHIR Client → Legacy KMEHR Hub Source**: The gateway accepts RESTful MHD searches and GET requests, translates them into SOAP KMEHR Web Service calls to legacy hub source systems, transforms the returned KMEHR XML / attachments into standardized FHIR Document Bundles, and returns them to the client.
 
 The field-by-field transformation rules the gateway applies in both directions — including how a FHIR Document Bundle is encapsulated inside a KMEHR `<lnk>` element during the transition — are specified in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#4-encapsulation-strategy-fhir-document-inside-kmehr-transition-phase).
 
@@ -169,8 +169,8 @@ flowchart LR
     subgraph Route1["<b>Proposal 1: Hub-Issued JWT Tokens</b>"]
         R1["• Asymmetric signed JWTs<br/>• Federated Hub-to-Hub trust<br/>• Validated via JWKS endpoints"]
     end
-    subgraph Route2["<b>Proposal 2: eHealth Platform IAM</b>"]
-        R2["• Centralized OIDC IdP<br/>• eID / itsme® / Enterprise cert<br/>• Federated hub & organisation identity"]
+    subgraph Route2["<b>Proposal 2: eHealth Platform IAM (M2M)</b>"]
+        R2["• Centralized national AS<br/>• Client credentials (no interactive user)<br/>• eHealth enterprise certificate (CBE)"]
     end
     subgraph Route3["<b>Proposal 3: STS Token Exchange Bridge</b>"]
         R3["• SAML 2.0 to OAuth 2.0 (RFC 8693)<br/>• Backward compatibility for legacy hub source connectors<br/>• RESTful FHIR translation"]
@@ -178,7 +178,7 @@ flowchart LR
 ```
 
 1. **Route 1: Hub/Enterprise-Issued JWTs**: Direct peer-to-peer trust federation between regional hubs using asymmetric signed JWT bearer tokens validated against public JWKS endpoints.
-2. **Route 2: eHealth Platform IAM**: Centralized identity management through the national eHealth OIDC provider, resolving authenticated practitioner NIHDI licenses and institution CBE numbers for identification and audit purposes.
+2. **Route 2: eHealth Platform IAM (machine-to-machine)**: Centralized authentication of the calling hub through the national eHealth IAM using the **OAuth 2.0 client credentials** grant and the hub's **eHealth enterprise certificate**. Interhub is system-to-system traffic, so this route involves **no eID or itsme® authentication**: the token identifies the calling hub organisation (CBE / hub OID), and practitioner details travel only as audit claims.
 3. **Route 3: STS Token Exchange Bridge**: Seamless backward compatibility bridge translating legacy SOAP WS-Trust / SAML 2.0 assertions from the eHealth STS into short-lived OAuth 2.0 JWTs (RFC 8693).
 
 In addition, to replace legacy SOAP SAML request signatures and guard against replay attacks and query parameter manipulation in the RESTful FHIR space, all routes evaluate **DPoP (RFC 9449)** and **RFC 9421 (HTTP Message Signatures)**.

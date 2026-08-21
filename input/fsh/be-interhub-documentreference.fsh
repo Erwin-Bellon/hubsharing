@@ -53,23 +53,39 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * category ^slicing.rules = #open
 * category contains cdTransaction 1..1 MS
 
-* category[cdTransaction] ^short = "Belgian document category (CD-TRANSACTION: sumehr, labresult, discharge, telemonitoring, etc.)"
-* category[cdTransaction].coding 1..* MS
-* category[cdTransaction].coding.system 1..1 MS
-* category[cdTransaction].coding.system = "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction" (exactly)
-* category[cdTransaction].coding.code 1..1 MS
+* category[cdTransaction] ^short = "Belgian document category (CD-TRANSACTION: sumehr, labresult, discharge, telemonitoring, etc.), optionally accompanied by local translations of the same category"
+* category[cdTransaction] ^definition = "Document category of this entry. The CD-TRANSACTION coding is mandatory so that every hub can filter on a single national vocabulary. Additional codings expressing the SAME category in another code system (a local hub source category such as 'daghospitalisatieVerslag', a regional catalogue code, or a LOINC/SNOMED CT equivalent) MAY be added to this CodeableConcept and MUST NOT be dropped when a document is relayed between hubs. A category that is a genuinely DIFFERENT concept belongs in an additional category element, not as an extra coding here."
 * category[cdTransaction] from BeVSCDTransaction (extensible)
+* category[cdTransaction].coding 1..* MS
+* category[cdTransaction].coding ^slicing.discriminator.type = #value
+* category[cdTransaction].coding ^slicing.discriminator.path = "system"
+* category[cdTransaction].coding ^slicing.rules = #open
+* category[cdTransaction].coding ^short = "One or more codings of the same document category; the CD-TRANSACTION coding is mandatory, local/alternative codings are allowed alongside it"
+* category[cdTransaction].coding contains cdTransactionCode 1..1 MS
+* category[cdTransaction].coding[cdTransactionCode] ^short = "The Belgian national CD-TRANSACTION coding (mandatory)"
+* category[cdTransaction].coding[cdTransactionCode].system 1..1 MS
+* category[cdTransaction].coding[cdTransactionCode].system = "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction" (exactly)
+* category[cdTransaction].coding[cdTransactionCode].code 1..1 MS
+* category[cdTransaction].text 0..1 MS
+* category[cdTransaction].text ^short = "Local human-readable label of the category, when no coded local equivalent exists"
+
+// Additional category elements (other than the CD-TRANSACTION one) remain allowed by the
+// open slicing above, for categories that are a different concept rather than a translation.
 
 * type 1..1 MS
-* type ^short = "Precise clinical document type (LOINC or national Belgian type code)"
+* type ^short = "Precise clinical document type (LOINC and/or national or local Belgian type codes)"
+* type ^definition = "Precise clinical type of the document. As for category, several codings MAY be present in this single CodeableConcept when they express the same document type in different code systems (e.g. a LOINC code plus a local hub source document-type code); at least one coding SHOULD be LOINC for cross-border and EHDS compatibility."
 * type.coding 1..* MS
 * type.coding.system 1..1 MS
 * type.coding.code 1..1 MS
+* type.text 0..1 MS
 
 // Patient Subject (INSS / SSIN)
 * subject 1..1 MS
 * subject only Reference(Patient)
 * subject ^short = "Patient who is the subject of the document (must carry national SSIN/INSS identifier)"
+* subject.identifier MS
+* subject.identifier ^short = "Patient SSIN / INSS carried inline, so a consumer does not need to resolve the Patient reference to identify the subject"
 
 // Temporal Metadata
 * date 1..1 MS
@@ -77,21 +93,50 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 
 // Authors & Organizations
 * author 1..* MS
-* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient)
+* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient or RelatedPerson)
 * author ^short = "Sequence of document authors. In Belgian Hub rules: first author represents the answering hub / originating hub source organisation, followed by the healthcare practitioner"
+* author ^definition = "Authors of the document. Any party type of the KMEHR CD-HCPARTY table can be represented: person types (persphysician, persnurse, persdentist, ...) as Practitioner or PractitionerRole, organisation types (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, ...) as Organization, department and specialty types (dept...) as Organization or PractitionerRole, software or automated senders (application) as Device, the patient as Patient, and other involved persons as RelatedPerson. The CD-HCPARTY code itself is carried inline by the hcPartyType extension so that consumers do not have to resolve the reference to learn what kind of party it is."
+* author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* author.extension[hcPartyType] ^short = "KMEHR CD-HCPARTY type of this author (persphysician, orghospital, orglaboratory, application, ...)"
+* author.identifier MS
+* author.identifier ^short = "Business identifier of the author (practitioner NIHDI, organisation NIHDI or CBE, hub OID). SHOULD be populated so the entry is usable without resolving the reference"
+* author.display MS
+* author.display ^short = "Human-readable name of the author, so a search result can be rendered without resolving the reference"
 
 * authenticator 0..1 MS
 * authenticator only Reference(Practitioner or PractitionerRole or Organization)
-* authenticator ^short = "Legal validator of the document content"
+* authenticator ^short = "Party that legally validated / attested the document content (KMEHR isvalidated)"
+* authenticator ^definition = "The healthcare party that legally validated the document. As for author, this may be any CD-HCPARTY party: a person type as Practitioner or PractitionerRole, or an organisation / department type as Organization. Its CD-HCPARTY code is carried inline by the hcPartyType extension."
+* authenticator.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* authenticator.extension[hcPartyType] ^short = "KMEHR CD-HCPARTY type of the validating party"
+* authenticator.identifier MS
+* authenticator.identifier ^short = "Business identifier of the validating party (NIHDI / CBE)"
+* authenticator.display MS
 
 * custodian 0..1 MS
 * custodian only Reference(Organization)
-* custodian ^short = "Custodian organization responsible for document maintenance (e.g. the hub source organisation or its repository)"
+* custodian ^short = "Custodian organization responsible for long-term document maintenance (the hub source organisation or its repository)"
+* custodian ^definition = "Organization accountable for the long-term maintenance and availability of the document. This is a CD-HCPARTY organisation type (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, orgpolyclinic, ...) — a hospital is only one of the possible custodians. Its CD-HCPARTY code is carried inline by the hcPartyType extension, and its CBE / NIHDI number by custodian.identifier."
+* custodian.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
+* custodian.extension[hcPartyType] ^short = "KMEHR CD-HCPARTY organisation type of the custodian"
+* custodian.identifier MS
+* custodian.identifier ^short = "Business identifier of the custodian organisation (NIHDI institution number or CBE enterprise number)"
+* custodian.display MS
 
 * relatesTo 0..* MS
-* relatesTo ^short = "Relationship to other documents (replaces, transforms, appends)"
-* relatesTo.code MS
-* relatesTo.target MS
+* relatesTo ^short = "Relationship to other documents (replaces, transforms, appends), expressed by business identifier"
+* relatesTo.code 1..1 MS
+* relatesTo.target 1..1 MS
+* relatesTo.target ^short = "The related document, identified by its business identifier (document uniqueId) rather than by a resolvable endpoint URL"
+* relatesTo.target ^definition = "Reference to the related document. Belgian Interhub uses a LOGICAL reference: relatesTo.target.identifier SHALL carry the uniqueId of the related document (the same value that appears in that document's identifier[uniqueId], as an RFC 3986 URI). A literal relatesTo.target.reference is OPTIONAL and, when present, is a convenience only: a consumer MUST be able to resolve the relationship from the identifier alone, without issuing an additional query per returned entry (avoiding N+1 round-trips over a federated network)."
+* relatesTo.target.identifier 1..1 MS
+* relatesTo.target.identifier.system 1..1 MS
+* relatesTo.target.identifier.system = "urn:ietf:rfc:3986" (exactly)
+* relatesTo.target.identifier.value 1..1 MS
+* relatesTo.target.identifier ^short = "uniqueId of the related document (RFC 3986 URI, e.g. urn:oid:... or urn:uuid:...)"
+* relatesTo.target.reference 0..1
+* relatesTo.target.reference ^short = "Optional literal reference; consumers MUST NOT be required to dereference it"
+* relatesTo.target.display 0..1 MS
 
 * description 0..1 MS
 * description ^short = "Human-readable title or clinical summary of the document (from KMEHR caption/text)"

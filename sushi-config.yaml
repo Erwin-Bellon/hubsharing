@@ -26,6 +26,10 @@ contact:
         value: support@ehealth.fgov.be
 
 dependencies:
+  hl7.fhir.be.core:
+    id: beCore
+    uri: https://www.ehealth.fgov.be/standards/fhir/core/ImplementationGuide/hl7.fhir.be.core
+    version: 2.1.2
   hl7.fhir.be.patient-monitoring:
     id: bePatientMonitoring
     uri: http://hl7belgium.org/fhir/patient-monitoring/ImplementationGuide/hl7.fhir.be.patient-monitoring

@@ -60,8 +60,8 @@ flowchart TD
         subgraph Route1["<b>Proposal 1: Hub/Enterprise JWT</b>"]
             R1["<b>Direct Hub Federation</b><br/>• Asymmetric signed JWTs<br/>• Validated via Hub JWKS"]
         end
-        subgraph Route2["<b>Proposal 2: eHealth IAM</b>"]
-            R2["<b>National OIDC IdP</b><br/>• eID / itsme® / Enterprise cert<br/>• Federated hub & organisation identity"]
+        subgraph Route2["<b>Proposal 2: eHealth IAM (M2M)</b>"]
+            R2["<b>National AS, machine-to-machine</b><br/>• Client credentials, no interactive user<br/>• eHealth enterprise certificate (CBE)<br/>• No eID / itsme® in the Interhub call"]
         end
         subgraph Route3["<b>Proposal 3: STS Bridge</b>"]
             R3["<b>Legacy SAML Exchange</b><br/>• eHealth SOAP STS assertions<br/>• RFC 8693 Token Exchange"]
@@ -71,7 +71,7 @@ flowchart TD
     Responder["<b>BELGIAN INTERHUB FHIR RESPONDER</b><br/>(Authenticates the calling hub: signature via JWKS;<br/>records SSIN, NIHDI, CBE claims for audit)"]
 
     Route1 -->|"Bearer JWT<br/>(Hub Private Key)"| Responder
-    Route2 -->|"Bearer JWT<br/>(eHealth OIDC AS)"| Responder
+    Route2 -->|"Bearer JWT<br/>(eHealth IAM, client credentials)"| Responder
     Route3 -->|"1. SAML 2.0 Assertion"| TokenGateway["<b>Token Exchange Gateway</b><br/>(RFC 8693 SAML2 to JWT)"]
     TokenGateway -->|"2. Short-lived Bearer JWT"| Responder
 ```
@@ -120,20 +120,55 @@ In this route, eHealth Hubs (e.g. CoZo, RSW, BHN, Zodap) or major healthcare ent
 
 ---
 
-### 2.2 Route 2: eHealth Platform IAM (National Identity Provider)
+### 2.2 Route 2: eHealth Platform IAM (National Authorization Server, Machine-to-Machine)
 
-In this route, authentication of the calling party is centralized through the **Belgian eHealth Platform IAM** infrastructure. IAM is used here purely as an identity provider for hubs, organisations, and their users; the access decision on the patient's records remains with the initiating hub.
+In this route, authentication of the calling hub is centralized through the **Belgian eHealth Platform IAM** infrastructure. 
+
+> **Interhub uses IAM machine-to-machine (M2M) only.** An Interhub call is a hub-to-hub system call with **no interactive user at the connection level**: it is authenticated with the calling hub's **eHealth enterprise certificate**, and **not** with eID, itsme® or any other citizen/practitioner authentication means. Those means may well be used by a hub to authenticate its *own* users locally, but that happens entirely inside the initiating hub and is never part of the Interhub authentication (see §1.1).
 
 #### Mechanics & Workflow:
-1. **User Authentication**:
-   * Interactive users (physicians, nurses, patients) authenticate via **eID**, **itsme®**, or TOTP mobile tokens.
-   * Automated systems authenticate using **eHealth Enterprise Certificates**.
-2. **Identity & Role Resolution**:
-   * eHealth IAM validates the professional's credentials against federal authoritative databases: **CoBRHA** (healthcare institutions), **Federal Health Professionals Database** (NIHDI licenses), and **Crossroads Bank for Enterprises (CBE)**.
+1. **Client Authentication (M2M)**:
+   * The initiating hub authenticates to eHealth IAM with the **OAuth 2.0 Client Credentials grant** (RFC 6749 §4.4) — there is no authorization-code flow, no user consent screen, and no OIDC ID Token.
+   * The client credential is the hub's **eHealth enterprise certificate**, presented either as **mutual-TLS client authentication** (RFC 8705, `tls_client_auth`) or as a signed **`private_key_jwt` client assertion** (RFC 7523) whose key is bound to that certificate.
+2. **Identity Resolution**:
+   * eHealth IAM resolves the enterprise certificate to the legal entity behind the calling hub — its **CBE / KBO** enterprise number, and where applicable the institution **NIHDI** number — against the federal authoritative sources (**CBE**, **CoBRHA**).
+   * The subject of the resulting token is therefore an **organisation, not a person**.
 3. **Token Issuance**:
-   * eHealth IAM issues signed OAuth 2.0 Access Tokens and OIDC ID Tokens containing standardized federal health claims (`https://ehealth.fgov.be/claims/...`).
+   * eHealth IAM issues a short-lived signed OAuth 2.0 **access token** naming the calling hub (`sub` / `client_id`, CBE, hub Home Community OID), the audience, and the granted scopes. The token is sender-constrained with **DPoP** as described in §3.
 4. **Consumption**:
-   * Any participating regional hub or repository verifies the token against the official eHealth JWKS endpoint (`https://iam.ehealth.fgov.be/.well-known/jwks.json`) to establish the identity of the calling hub, and logs the resolved identities.
+   * The responding hub verifies the token against the official eHealth JWKS endpoint (`https://iam.ehealth.fgov.be/.well-known/jwks.json`), checks `aud`, `scope` and the DPoP binding, and logs the identity of the calling hub in its `AuditEvent`.
+
+```http
+POST /oauth2/token HTTP/1.1
+Host: iam.ehealth.fgov.be
+Content-Type: application/x-www-form-urlencoded
+DPoP: eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6IkVTMjU2Iiwiandr...
+
+grant_type=client_credentials
+&scope=interhub:documentreference.read interhub:document.read
+&client_assertion_type=urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer
+&client_assertion=eyJhbGciOiJSUzI1NiIsIng1dCI6...
+```
+
+```json
+{
+  "iss": "https://iam.ehealth.fgov.be",
+  "sub": "urn:oid:1.3.6.1.4.1.21297.1.3",
+  "client_id": "hub-cozo-interhub",
+  "aud": "https://hub.rsw.be/fhir",
+  "scope": "interhub:documentreference.read interhub:document.read",
+  "cnf": { "jkt": "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I" },
+  "be:organization": {
+    "cbe": "0419052173",
+    "nihdi": "71000012",
+    "home_community_id": "urn:oid:1.3.6.1.4.1.21297.1.3"
+  },
+  "iat": 1773050400,
+  "exp": 1773051000
+}
+```
+
+> The end user behind the request never appears in this token as an *authenticated* identity. Where the responding hub needs end-user information for its audit trail, the initiating hub supplies it as descriptive claims (as in Route 1), on its own responsibility — the responding hub records them, it does not verify them.
 
 ---
 
@@ -292,7 +327,7 @@ Signature: sig1=:MEUCIQDxZ8Y7j...kL9A1wP==:
 
 The table below illustrates how Replay & Query Tamper-Proofing integrates into each of the 3 proposed authentication routes:
 
-| Security Dimension | Proposal 1: Hub-Issued JWTs (Direct Federation) | Proposal 2: eHealth Platform IAM (National OIDC) | Proposal 3: STS Token Exchange Bridge (RFC 8693) |
+| Security Dimension | Proposal 1: Hub-Issued JWTs (Direct Federation) | Proposal 2: eHealth Platform IAM (National AS, M2M) | Proposal 3: STS Token Exchange Bridge (RFC 8693) |
 | :--- | :--- | :--- | :--- |
 | **Tamper-Proofing Standard** | **DPoP (RFC 9449)** or **RFC 9421** | **DPoP (RFC 9449)** with eHealth IAM AS | **RFC 9421** / Gateway-enforced DPoP |
 | **Signing Key** | Hub private key (published via JWKS) | Client DPoP key or eHealth Enterprise Cert | Legacy X.509 Keystore / STS Gateway Key |
@@ -321,7 +356,7 @@ Consequently, a responding hub **MUST NOT** answer an Interhub query with an acc
 
 ---
 
-## 5. Audit Trail & Traceability (`getTransactionAccessList` $\longleftrightarrow$ IHE BALP)
+## 5. Audit Trail & Traceability (from `getTransactionAccessList` to IHE BALP)
 
 Under Belgian law (Patient Rights Act & eHealth Platform Law), every access, search, and retrieval of medical records must be immutably recorded for auditability. In the legacy KMEHR world, the `getTransactionAccessList` SOAP service exposed access logs.
 

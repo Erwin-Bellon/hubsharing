@@ -79,7 +79,7 @@ While maintaining 100% downstream compatibility with EHDS cross-border exchange,
 
 ---
 
-## 4. Cross-Border Gateway Translation (MyHealth@EU $\longleftrightarrow$ Belgian Hubs)
+## 4. Cross-Border Gateway Translation (MyHealth@EU and Belgian Hubs)
 
 When a foreign European healthcare provider queries for a Belgian patient's records via MyHealth@EU:
 

@@ -166,6 +166,7 @@ Both pages assume [Envelope & Metadata](envelope-and-metadata.html) and [Transac
   * `BeExtHomeCommunityId`: Hub Home Community ID for cross-hub routing.
   * `BeExtEndToEndEncryption`: Belgian eHealth ETK depot encryption metadata for end-to-end secure transmission.
   * `BeExtRecordDateTime`: Source repository recording timestamp.
+  * `BeExtHcPartyType`: KMEHR `CD-HCPARTY` type of an author, authenticator or custodian, carried inline in the metadata envelope.
   * `TelemonitoringId`, `Carepath`, `PrescriberApplication`, `SourceTelemonitoringReport`: Telemonitoring metadata extensions.
 * **Capability Statements**:
   * `BeInterhubDocumentResponder`: Server requirements for eHealth Hubs and Document Registries/Repositories.

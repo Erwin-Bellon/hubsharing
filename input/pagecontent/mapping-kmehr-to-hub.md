@@ -8,12 +8,12 @@
 
 ## 1. Executive Summary & Mapping Scope
 
-This specification provides the normative, bi-directional mapping between legacy Belgian **KMEHR** XML messages (used in SOAP Interhub Web Services such as `getTransactionList` and `getTransaction`), intermediate **IHE XDS.b / XCA** constructs, and the target **HL7® FHIR® R4 / IHE MHD** profiles.
+This page holds the normative, bi-directional mapping between three representations of the same information: legacy Belgian **KMEHR** XML as used in the SOAP Interhub Web Services (`getTransactionList`, `getTransaction`), the intermediate **IHE XDS.b / XCA** constructs, and the target **HL7® FHIR® R4 / IHE MHD** profiles.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph KMEHR["<b>Legacy Belgian KMEHR</b>"]
-        direction TB
+        direction LR
         K1["TransactionSummaryType / id"]
         K2["folder / patient / id (INSS)"]
         K3["transaction / cd (CD-TRANSACTION)"]
@@ -22,7 +22,7 @@ flowchart LR
     end
 
     subgraph XDS["<b>IHE XDS.b / XCA</b>"]
-        direction TB
+        direction LR
         X1["XDSDocumentEntry.uniqueId"]
         X2["XDSDocumentEntry.patientId"]
         X3["XDSDocumentEntry.classCode"]
@@ -31,7 +31,7 @@ flowchart LR
     end
 
     subgraph FHIR["<b>HL7 FHIR R4 / IHE MHD</b>"]
-        direction TB
+        direction LR
         F1["BeInterhubDocumentReference<br/>• masterIdentifier / uniqueId<br/>• extension[homeCommunityId]"]
         F2["subject (Patient with SSIN)"]
         F3["category[cdTransaction] & type (LOINC)"]
@@ -57,18 +57,18 @@ This page maps *between* representations; it does not define the target. The FHI
 
 | Concept | KMEHR Schema Element (`getTransactionList` / `getTransaction`) | IHE XDS.b ebXML RIM 3.0 Attribute / Slot | FHIR MHD (`BeInterhubDocumentReference`) Element | FHIR Datatype & Syntax | Transformation Logic & Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Document Unique ID** | `transaction/id[@S="ID-KMEHR"]`<br>or `transactionSummary/id` | `XDSDocumentEntry.uniqueId` (`externalIdentifier` `urn:uuid:2e82c1f6...`) | `masterIdentifier`<br>and `identifier[uniqueId]` | `Identifier` (`system = "urn:ietf:rfc:3986"`) | Prefix with `urn:oid:` or `urn:uuid:` to form a valid RFC 3986 URI. |
+| **Document Unique ID** | `transaction/id[@S="ID-KMEHR"]`<br/>or `transactionSummary/id` | `XDSDocumentEntry.uniqueId` (`externalIdentifier` `urn:uuid:2e82c1f6...`) | `masterIdentifier`<br/>and `identifier[uniqueId]` | `Identifier` (`system = "urn:ietf:rfc:3986"`) | Prefix with `urn:oid:` or `urn:uuid:` to form a valid RFC 3986 URI. |
 | **Local Repository ID** | `transaction/id[@SL]` or source local ID | Local entry ID in repository | `identifier[localId]` | `Identifier` | Internal record number in the hub source system. |
 | **Home Community ID** | Metahub header `hub/id` or `id[@SL]` | `XDSDocumentEntry.homeCommunityId` (`ExtrinsicObject/@home`) | `extension[homeCommunityId]` | `Extension(valueUri)` | Registered Hub OID as URI (e.g. `urn:oid:1.3.6.1.4.1.21297.1.3`). Mandatory for cross-hub routing. |
 | **Repository Unique ID** | Routing key / Repository OID | `XDSDocumentEntry.repositoryUniqueId` (`Slot name="repositoryUniqueId"`) | `custodian.identifier` | `Identifier` | Identifies the physical repository of the hub source (`1.3.6.1.4.1.21297.100.2.X`). |
 | **Patient Identifier (SSIN)** | `folder/patient/id[@S="INSS"]` | `XDSDocumentEntry.patientId` (`externalIdentifier` `urn:uuid:58a7...`) | `subject` → `Patient.identifier` | `Identifier` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"` and `value = INSS`. |
-| **Patient Demographics** | `folder/patient/familyname`<br>`folder/patient/firstname`<br>`folder/patient/birthdate`<br>`folder/patient/sex/cd` | `XDSDocumentEntry.sourcePatientInfo` (`Slot name="sourcePatientInfo"` PID lines) | `subject` → `Patient` resource | `Resource(Patient)` | Maps name, birthDate, gender (`male`/`female`), and address lines. |
-| **Document Category** | `transaction/cd[@S="CD-TRANSACTION"]`<br>(e.g. `sumehr`, `labresult`, `discharge`) | `XDSDocumentEntry.classCode` (`Classification` `urn:uuid:41a5...`) | `category[cdTransaction]` | `CodeableConcept` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction"` and `code = transaction/cd`. |
-| **Document Type Code** | `transaction/cd[@S="CD-CLINICAL"]` | `XDSDocumentEntry.typeCode` (`Classification` `urn:uuid:f030...`) | `type` | `CodeableConcept` | LOINC code (e.g. `11502-2` for Lab Report, `10185-7` for Holter Study). |
-| **Document Title / Caption** | `transaction/caption`<br>or `transaction/text` | `XDSDocumentEntry.title` (`rim:Name/rim:LocalizedString`) | `description`<br>and `content.attachment.title` | `string` | UTF-8 human-readable document description. |
-| **Document Status** | Document execution status (`iscomplete`, `isvalid`) | `XDSDocumentEntry.availabilityStatus` (`ExtrinsicObject/@status`) | `status` | `code` | Approved → `current`<br>Deprecated/Replaced → `superseded`. |
-| **Document Lifecycle Status** | `iscomplete="false"` → preliminary<br>`isvalidated="true"` → final | XDS document lifecycle status | `docStatus` | `code` | `preliminary` \| `final` \| `amended`. |
-| **Creation Date & Time** | `transaction/date` & `time`<br>or `recorddatetime` | `XDSDocumentEntry.creationTime` (`Slot name="creationTime"`) | `date` | `instant` (ISO 8601 UTC) | Standardized to UTC (`YYYY-MM-DDThh:mm:ssZ`). |
+| **Patient Demographics** | `folder/patient/familyname`<br/>`folder/patient/firstname`<br/>`folder/patient/birthdate`<br/>`folder/patient/sex/cd` | `XDSDocumentEntry.sourcePatientInfo` (`Slot name="sourcePatientInfo"` PID lines) | `subject` → `Patient` resource | `Resource(Patient)` | Maps name, birthDate, gender (`male`/`female`), and address lines. |
+| **Document Category** | `transaction/cd[@S="CD-TRANSACTION"]`<br/>(e.g. `sumehr`, `labresult`, `discharge`) | `XDSDocumentEntry.classCode` (`Classification` `urn:uuid:41a5...`) | `category[cdTransaction]` | `CodeableConcept` | `system = "https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction"` and `code = transaction/cd`. |
+| **Document Type Code** | `transaction/cd[@S="CD-CLINICAL"]` | `XDSDocumentEntry.typeCode` (`Classification` `urn:uuid:f030...`) | `type` | `CodeableConcept` | LOINC code (e.g. `11502-2` for Lab Report, `18754-2` for Holter Study). |
+| **Document Title / Caption** | `transaction/caption`<br/>or `transaction/text` | `XDSDocumentEntry.title` (`rim:Name/rim:LocalizedString`) | `description`<br/>and `content.attachment.title` | `string` | UTF-8 human-readable document description. |
+| **Document Status** | Document execution status (`iscomplete`, `isvalid`) | `XDSDocumentEntry.availabilityStatus` (`ExtrinsicObject/@status`) | `status` | `code` | Approved → `current`<br/>Deprecated/Replaced → `superseded`. |
+| **Document Lifecycle Status** | `iscomplete="false"` → preliminary<br/>`isvalidated="true"` → final | XDS document lifecycle status | `docStatus` | `code` | `preliminary` \| `final` \| `amended`. |
+| **Creation Date & Time** | `transaction/date` & `time`<br/>or `recorddatetime` | `XDSDocumentEntry.creationTime` (`Slot name="creationTime"`) | `date` | `instant` (ISO 8601 UTC) | Standardized to UTC (`YYYY-MM-DDThh:mm:ssZ`). |
 | **Service Period Start** | `transaction/begindate` & `begintime` | `XDSDocumentEntry.serviceStartTime` (`Slot name="serviceStartTime"`) | `context.period.start` | `dateTime` | Timestamp when medical encounter or monitoring started. |
 | **Service Period End** | `transaction/enddate` & `endtime` | `XDSDocumentEntry.serviceStopTime` (`Slot name="serviceStopTime"`) | `context.period.end` | `dateTime` | Timestamp when medical encounter or monitoring ended. |
 | **Authoring Hub** | Answering Hub identifier in `header/sender` | First `authorInstitution` in XDS | `author[0]` → `Organization` | `Reference(Organization)` | Regional hub answering the request (e.g. CoZo). `author[0].extension[hcPartyType]` = `application`. |
@@ -134,7 +134,7 @@ The code system (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-
 
 ## 4. Encapsulation Strategy: FHIR Document inside KMEHR (Transition Phase)
 
-During the migration period, legacy systems unable to process native RESTful FHIR interactions can receive FHIR Document Bundles encapsulated inside standard KMEHR messages via `<lnk>` multimedia elements. This is the payload direction of the dual-stack gateway described in [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase); the encapsulated bundle itself is a normal `BeInterhubDocumentBundle` as specified in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document):
+Some systems will not be ready for native RESTful FHIR when the migration begins, and they still need the data. Throughout the transition, a FHIR Document Bundle can be delivered to them inside an ordinary KMEHR message, encapsulated in a `<lnk>` multimedia element. This is the payload direction of the dual-stack gateway described in [Architecture §4](architecture.html#4-dual-stack-gateway-architecture-transition-phase); the encapsulated bundle itself is a normal `BeInterhubDocumentBundle` as specified in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document):
 
 ```xml
 <transaction>

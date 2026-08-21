@@ -50,3 +50,98 @@
   align-items: center;
   height: 70px;
 }
+
+/* ============================================================================
+   Narrative content tables
+   ----------------------------------------------------------------------------
+   Markdown tables in input/pagecontent/*.md are converted by the IG publisher
+   (commonmark dialect) into <table class="grid">. The publisher's own fhir.css
+   styles table.grid as a bare 3px-padded verdana grid with no width constraint,
+   and bootstrap-fhir.css only relaxes inline code to white-space:normal, which
+   still refuses to break inside a long token. The result on the wide mapping
+   tables of this IG is a table whose columns are forced at least as wide as the
+   longest URL/OID they contain, so the table overflows the text column and the
+   remaining columns get squeezed.
+
+   These rules live in colors.css because that is the stylesheet this local
+   template overrides, and it is linked after fhir.css and bootstrap-fhir.css.
+   They are scoped to #segment-content so header/footer chrome is untouched.
+   ============================================================================ */
+
+#segment-content table.grid {
+  width: 100%;
+  max-width: 100%;
+  margin: 1em 0 1.5em 0;
+  border: 1px solid #b8c4d9;
+  border-collapse: collapse;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+#segment-content table.grid > thead > tr > th,
+#segment-content table.grid > tbody > tr > th {
+  padding: 8px 10px;
+  border: 1px solid #b8c4d9;
+  border-bottom-width: 2px;
+  background-color: #e8eef8;
+  color: var(--ig-status-text-color);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: bottom;
+}
+
+#segment-content table.grid > tbody > tr > td {
+  padding: 7px 10px;
+  border: 1px solid #d6dded;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  vertical-align: top;
+  /* long OIDs, canonical URLs and KMEHR paths must break inside the cell
+     instead of dictating the column width */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#segment-content table.grid > tbody > tr:nth-child(even) > td {
+  background-color: #f7f9fc;
+}
+
+#segment-content table.grid > tbody > tr:hover > td {
+  background-color: #eef4ff;
+}
+
+/* Inline code is everywhere in these tables: keep it readable but breakable,
+   and drop the heavy per-span padding that made dense rows look ragged. */
+#segment-content table.grid code {
+  padding: 0 2px;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Row-label column: the mapping tables lead with a short bolded element name. */
+#segment-content table.grid > tbody > tr > td:first-child {
+  white-space: normal;
+}
+
+/* Nested grids (value set expansions, etc.) must not inherit the outer chrome. */
+#segment-content table.grid table.grid {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Narrow viewports: let a wide table scroll horizontally inside the page
+   instead of stretching the page itself. */
+@media (max-width: 991px) {
+  #segment-content table.grid {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

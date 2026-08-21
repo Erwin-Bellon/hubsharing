@@ -8,9 +8,9 @@
 
 ## 1. Executive Summary & Discussion Context
 
-In the legacy Belgian **KMEHR** ecosystem, **End-to-End Encryption (ETEE)** was a defining architectural feature for sensitive clinical data exchange. When sending medical transactions across regional hubs or via the eHealthBox, the originating system encrypted the `<folder>` payload using the recipient's public key retrieved from the national **eHealth ETK (Encryption Token Key) Depot**. Regional hubs and the Metahub acted as "zero-knowledge" routing brokers, inspecting only the unencrypted XML `<header>` and `<transactionSummary>` while remaining incapable of reading the underlying clinical content.
+**End-to-End Encryption (ETEE)** was one of the defining features of the legacy **KMEHR** ecosystem. Sending a medical transaction across regional hubs or through the eHealthBox meant encrypting the `<folder>` payload with the recipient's public key, fetched from the national **eHealth ETK (Encryption Token Key) Depot**. The regional hubs and the Metahub routed those messages as zero-knowledge brokers: they read the plaintext `<header>` and `<transactionSummary>`, and the clinical content stayed closed to them.
 
-As Belgium transitions to **HL7® FHIR® R4** and the **IHE MHD** profile family, this architectural paper addresses a fundamental question:
+The move to **HL7® FHIR® R4** and the **IHE MHD** profile family puts that design back on the table. This paper addresses one question:
 
 > **Should Belgium continue doing End-to-End Payload Encryption in the FHIR Interhub world, and if so, how would it look and what are the trade-offs?**
 
@@ -42,7 +42,7 @@ The KMEHR structures named in this flow (`<header>`, `<folder>`, `<transactionSu
 
 ## 3. How Would End-to-End Encryption Look in the FHIR World?
 
-If application-layer payload encryption is retained in FHIR Interhub sharing, two concrete technical mechanisms can be implemented:
+Two concrete mechanisms are available if application-layer payload encryption is retained in FHIR Interhub sharing:
 
 ```mermaid
 flowchart TD
@@ -59,7 +59,7 @@ flowchart TD
 
 ### 3.1 Option 1: JSON Web Encryption (JWE - RFC 7516) *(Recommended for FHIR)*
 
-In a FHIR-native environment, JWE provides an elegant, JSON-based payload encryption standard:
+JWE keeps payload encryption inside the JSON world the rest of the exchange already inhabits:
 1. The originating system serializes the complete FHIR Document Bundle (`Bundle.type = #document`).
 2. The JSON string is encrypted into a **JWE (RFC 7516)** compact or general JSON serialization using AES-GCM (e.g. `A256GCM`) with the recipient's public key (RSA-OAEP-256 or ECDH-ES) fetched from the eHealth ETK depot.
 3. The encrypted JWE is stored as a FHIR **`Binary`** resource (`contentType = application/jose`) or embedded inside the `BeInterhubDocumentReference.content.attachment.data` (element specified in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference)).
@@ -130,7 +130,7 @@ Alternatively, the FHIR Document Bundle is encoded into a standard ASN.1 Cryptog
 
 ## 4. Architectural Analysis: Should Belgium Continue E2EE in FHIR?
 
-To make an informed national decision, we must evaluate the trade-offs between **Zero-Knowledge Payload Encryption** and **Transport-Layer Security (TLS 1.3 / mTLS) between mutually trusted hubs**:
+The national decision turns on a trade-off between **zero-knowledge payload encryption** and **transport-layer security (TLS 1.3 / mTLS) between mutually trusted hubs**:
 
 | Dimension | Model A: E2EE Payload Encryption (KMEHR / JWE Zero-Knowledge) | Model B: Transport Security (mTLS + authenticated hubs) (Standard FHIR/EHDS) |
 | :--- | :--- | :--- |
@@ -138,7 +138,7 @@ To make an informed national decision, we must evaluate the trade-offs between *
 | **2. Search & Indexing** | Metadata only; no payload querying | Deep querying on Observations |
 | **3. Clinical Decision Support** | Impossible at hub/gateway level | Fully supported |
 | **4. Multi-Disciplinary Care** | High complexity (multi-key management) | Simple (handled locally by the initiating hub) |
-| **5. EHDS Cross-Border Interop** | Incompatible without central decrypt | 100% natively compatible |
+| **5. EHDS Cross-Border Interop** | Incompatible without central decrypt | Natively compatible |
 | **6. Tooling & Ecosystem** | Requires custom cryptographic plugins | Standard FHIR parsers & apps |
 
 ### 4.1 Detailed Breakdown of Challenges with E2EE in FHIR:
@@ -149,21 +149,21 @@ To make an informed national decision, we must evaluate the trade-offs between *
 
 2. **The "Care Team" Multi-Recipient Dilemma**:
    * KMEHR ETEE worked well for point-to-point mailings (eHealthBox doctor-to-doctor).
-   * However, Hub document sharing serves **multidisciplinary care teams**, departments and services across every kind of hub source, covering physicians, and emergency rooms.
-   * Encrypting a document at publish time requires knowing *every future clinician* who might need to view it—which is impossible for emergency care.
+   * Hub document sharing serves something quite different: **multidisciplinary care teams**, departments and services spread across every kind of hub source, from a solo practice to an emergency room.
+   * Encrypting at publish time means naming, in advance, every clinician who will ever need to read the document. Emergency care makes that impossible by definition.
 
 3. **European Health Data Space (EHDS) Incompatibility**:
    * EHDS / MyHealth@EU mandates that National Contact Points (NCPeH) inspect, validate, and mediate standard FHIR Document Bundles across borders.
    * Encrypted JWE/CMS blobs cannot be processed by European gateways without a centralized decryption proxy, defeating the purpose of end-to-end encryption.
 
 4. **Client Tooling Overhead**:
-   * Standard SMART on FHIR apps, mobile health apps, and cloud EHRs lack native support for Belgian ETK depot decryption.
+   * Standard SMART on FHIR apps, mobile health applications and cloud EHRs have no native support for Belgian ETK depot decryption, and would each need a bespoke cryptographic plugin.
 
 ---
 
 ## 5. Recommended Strategic Solution: The Tiered Hybrid Architecture
 
-Rather than an "all-or-nothing" approach, this Implementation Guide proposes a **Tiered Hybrid Architecture**:
+The choice need not be all or nothing. This Implementation Guide proposes a **tiered hybrid architecture**, matching the protection to the sensitivity of the document:
 
 ```mermaid
 flowchart TD
@@ -179,7 +179,7 @@ flowchart TD
 ```
 
 1. **Tier 1 (General Exchange - 95%+ of volume)**:
-   * Laboratory results, telemonitoring summaries, discharge letters, and SUMEHRs are exchanged as **plaintext FHIR Document Bundles** over mutually authenticated, encrypted TLS 1.3 connections between trusted hubs, with comprehensive IHE BALP audit logging on both sides. Access control itself is performed by the initiating hub before the request is emitted. This unlocks full clinical querying, AI-assisted decision support, and EHDS cross-border exchange.
+   * Laboratory results, telemonitoring summaries, discharge letters, and SUMEHRs are exchanged as **plaintext FHIR Document Bundles** over mutually authenticated, encrypted TLS 1.3 connections between trusted hubs, with comprehensive IHE BALP audit logging on both sides. Access control itself is performed by the initiating hub before the request is emitted. That keeps clinical querying, decision support and EHDS cross-border exchange available.
 2. **Tier 2 (Sensitive / Sealed Consultations)**:
    * For highly sensitive documents intended strictly for a named individual or confidential department, systems use **JWE payload encryption** with the recipient's ETK key. The `BeInterhubDocumentReference` provides the unencrypted discovery metadata, while the `content.attachment.url` delivers the encrypted JWE payload.
 

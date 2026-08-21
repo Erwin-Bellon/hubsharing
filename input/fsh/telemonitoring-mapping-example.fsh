@@ -7,7 +7,7 @@ Instance: HolterDiagnosticReport
  Description: "Example source Holter Diagnostic Report"
  Usage: #example
 * status = #final
-* code = http://loinc.org#10185-7 "Holter study"
+* code = http://loinc.org#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
 * subject = Reference(PatientExample)
 * effectivePeriod.start = "2026-01-01T08:00:00Z"
 * effectivePeriod.end   = "2026-01-02T08:00:00Z"
@@ -25,7 +25,7 @@ Usage: #example
 * extension[carepath].extension[version].valueString    = "1.0"
 * extension[prescriberApplication].valueString = "TeleMonApp v2.1"
 * status    = #final
-* code      = http://loinc.org#10185-7 "Holter study"
+* code      = http://loinc.org#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
 * subject   = Reference(PatientExample)
 * performer = Reference(PrescriberExample)
 * presentedForm[0].contentType = #application/pdf

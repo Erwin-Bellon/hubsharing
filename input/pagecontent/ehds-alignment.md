@@ -8,14 +8,14 @@
 
 ## 1. Context & Strategic Alignment
 
-The **European Health Data Space (EHDS)** regulation establishes common standards, technical architectures, and interoperability profiles for cross-border primary use of health data across EU Member States (**MyHealth@EU / eHDSI**). Key priority clinical domains defined by the European Commission and HL7 Europe include:
+The **European Health Data Space (EHDS)** regulation lays down common standards, technical architectures and interoperability profiles for the cross-border primary use of health data between EU Member States, delivered through **MyHealth@EU / eHDSI**. The European Commission and HL7 Europe have named a set of priority clinical domains:
 * **Laboratory Results (EU Lab)**: Laboratory test reports, panels, observations, and specimens.
 * **Hospital Discharge Reports (EU HDR)**: Episode summaries and hospitalization reports.
 * **Patient Summaries (EU PS)**: Core longitudinal health summaries.
 * **Medical Imaging Studies (EU Imaging / MADO)**: DICOM manifest studies and imaging reports.
 * **ePrescription & eDispensation (EU eP/eD)**: Pharmaceutical prescriptions and dispensing records.
 
-A primary requirement of the Belgian Interhub modernization initiative is to ensure **strict alignment and semantic compatibility with EHDS profiles**, while preserving the advanced governance, federated routing, and privacy controls established in the Belgian healthcare system — that is, the extensions specified in [Envelope & Metadata §3](envelope-and-metadata.html#3-belgian-extensions-deep-dive) and the federation model described in [Architecture](architecture.html).
+Belgian Interhub modernization is bound by a firm requirement: **strict alignment and semantic compatibility with the EHDS profiles**, without giving up the governance, federated routing and privacy controls the Belgian system already has — that is, the extensions specified in [Envelope & Metadata §3](envelope-and-metadata.html#3-belgian-extensions-deep-dive) and the federation model described in [Architecture](architecture.html).
 
 ---
 
@@ -59,7 +59,7 @@ flowchart TD
 
 ## 3. Belgian Advancements Beyond Baseline EHDS
 
-While maintaining 100% downstream compatibility with EHDS cross-border exchange, the Belgian Interhub system includes advanced national capabilities required for day-to-day healthcare delivery:
+Belgium carries several capabilities that the European baseline does not require, each of them driven by day-to-day care delivery rather than by cross-border exchange. None of them breaks downstream compatibility:
 
 ### 3.1 Federated Multi-Hub Routing (`homeCommunityId`)
 * **EHDS**: Typically models exchanges through a single National Contact Point for eHealth (NCPeH) per Member State.
@@ -81,7 +81,7 @@ While maintaining 100% downstream compatibility with EHDS cross-border exchange,
 
 ## 4. Cross-Border Gateway Translation (MyHealth@EU and Belgian Hubs)
 
-When a foreign European healthcare provider queries for a Belgian patient's records via MyHealth@EU:
+The flow below traces what happens when a healthcare provider elsewhere in Europe queries a Belgian patient's records through MyHealth@EU:
 
 ```mermaid
 sequenceDiagram

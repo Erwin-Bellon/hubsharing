@@ -76,7 +76,7 @@ Instance: SourceDiagnosticReportExample
 InstanceOf: DiagnosticReport
 Description: "An example source diagnostic report"
 * status = #final
-* code = http://loinc.org#10185-7 "Holter study"
+* code = http://loinc.org#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
 * subject = Reference(PatientExample)
 
 // ---- Example instance ----

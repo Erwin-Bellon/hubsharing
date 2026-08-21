@@ -8,43 +8,43 @@
 
 ## 1. Context & Architectural Problem
 
-The Belgian eHealth Hub network acts primarily as a **document sharing infrastructure**. When migrating from legacy KMEHR SOAP Web Services to HL7 FHIR R4, architects had to determine the optimal FHIR resource paradigms to balance:
+FHIR offers several ways of moving clinical data between systems, and they are not interchangeable. Picking one for the Belgian hub network meant weighing four requirements against each other:
 1. **Clinical Integrity & Immutability**: A shared medical record (such as a laboratory report or discharge letter) must represent an authenticated snapshot in time that cannot change retroactively without explicit versioning.
 2. **Metadata Discovery vs. Content Retrieval**: Separation between lightweight search operations across millions of records and targeted content retrieval.
 3. **Decoupled Architecture**: Preserving autonomy between independent hub source systems (hospital EHRs, laboratory information systems, pharmacy and practice software) and regional hubs without requiring complex cross-enterprise database synchronization.
-4. **European Harmonization**: Seamless alignment with the **European Health Data Space (EHDS)** and **IHE MHD** — the resulting alignment is analysed in [EHDS Alignment](ehds-alignment.html).
+4. **European Harmonization**: Alignment with the **European Health Data Space (EHDS)** and **IHE MHD**, analysed in [EHDS Alignment](ehds-alignment.html).
 
 ---
 
-## 2. Evaluation of Evaluated Carrier Paradigms
+## 2. Evaluation of Candidate Carrier Paradigms
 
 ```mermaid
 flowchart TD
     subgraph Evaluation["<b>FHIR Payload Carrier Paradigm Evaluation</b>"]
         direction TB
         subgraph Opt1["<b>1. FHIR Messaging (Bundle type = message)</b>"]
-            O1["• Pros: Event routing & MessageHeader semantics<br/>• Cons: Point-to-point only; lacks document registry indexing & long-term archiving<br/>• Status: ❌ <b>Rejected for Interhub Sharing</b>"]
+            O1["• Pros: Event routing & MessageHeader semantics<br/>• Cons: Point-to-point only; lacks document registry indexing & long-term archiving<br/>• Status: <b>Rejected for Interhub sharing</b>"]
         end
         subgraph Opt2["<b>2. Direct Granular Resource Access (GET /Observation)</b>"]
-            O2["• Pros: Fine-grained query flexibility<br/>• Cons: Lacks legal attestation snapshot, document provenance & immutability<br/>• Status: ❌ <b>Rejected for Interhub Document Payloads</b>"]
+            O2["• Pros: Fine-grained query flexibility<br/>• Cons: Lacks legal attestation snapshot, document provenance & immutability<br/>• Status: <b>Rejected for Interhub document payloads</b>"]
         end
         subgraph Opt3["<b>3. FHIR Document Bundle (Bundle type = document)</b>"]
-            O3["• Pros: Legally attested snapshot, self-contained, human-readable narrative, 100% IHE MHD & EHDS aligned<br/>• Cons: Payload must be retrieved as a whole (mitigated by BeInterhubDocumentReference)<br/>• Status: ✅ <b>SELECTED NATIONAL PARADIGM</b>"]
+            O3["• Pros: Legally attested snapshot, self-contained, human-readable narrative, fully aligned with IHE MHD & EHDS<br/>• Cons: Payload must be retrieved as a whole (mitigated by BeInterhubDocumentReference)<br/>• Status: <b>SELECTED NATIONAL PARADIGM</b>"]
         end
     end
 ```
 
 | Option | Pros | Cons / Reason for Rejection | Selection Status |
 | :--- | :--- | :--- | :--- |
-| **1. FHIR Messaging** (`Bundle.type = #message`) | Built-in MessageHeader and event routing semantics. | Point-to-point oriented; does not support document indexing, search, & archive. | ❌ Rejected |
-| **2. Direct Resource Queries** (RESTful `Observation` / `DiagnosticReport`) | Fine-grained queries on individual resources (e.g. `GET /Observation`). | Lacks document integrity, authorship context, legal attestation, & immutability. | ❌ Rejected |
-| **3. FHIR Document Bundle** (`Bundle.type = #document` + Root `Composition`) | Self-contained & immutable snapshot, mandatory narrative for safety, complete clinical context & author, 100% aligned with IHE MHD & EHDS. | Requires full bundle retrieval for viewing (addressed by decoupled metadata). | ✅ **SELECTED PARADIGM** (Mandated) |
+| **1. FHIR Messaging** (`Bundle.type = #message`) | Built-in MessageHeader and event routing semantics. | Point-to-point oriented; does not support document indexing, search, & archive. | Rejected |
+| **2. Direct Resource Queries** (RESTful `Observation` / `DiagnosticReport`) | Fine-grained queries on individual resources (e.g. `GET /Observation`). | Lacks document integrity, authorship context, legal attestation, & immutability. | Rejected |
+| **3. FHIR Document Bundle** (`Bundle.type = #document` + Root `Composition`) | Self-contained & immutable snapshot, mandatory narrative for safety, complete clinical context & author, fully aligned with IHE MHD & EHDS. | Requires full bundle retrieval for viewing (addressed by decoupled metadata). | **SELECTED PARADIGM** (Mandated) |
 
 ### 2.1 Why FHIR Messaging (`Bundle.type = #message`) Was Not Selected
-FHIR Messaging is designed for event-driven, asynchronous routing between known communication endpoints (similar to HL7 v2 messages). However, the Belgian Hub ecosystem is an **indexing, discovery, and retrieval** network, where documents must be registered, cataloged, searched years later, and retrieved on demand. Messaging lacks standard document registry query semantics (`ITI-67`).
+Messaging suits event-driven, asynchronous routing between endpoints that already know about one another, much as HL7 v2 did. The Belgian hub ecosystem works the other way round. It is an **indexing, discovery and retrieval** network: a document is registered once and then catalogued, searched years later, and fetched on demand by consumers the publisher never anticipated. Messaging has no registry query semantics to offer for any of that, and nothing equivalent to `ITI-67`.
 
 ### 2.2 Why Direct Granular RESTful Resource Access Was Not Selected
-Allowing consumers to query isolated `Observation` or `DiagnosticReport` resources directly across federated hub source databases would expose operational source systems to high query loads, introduce security risks, and strip away crucial provenance, institutional authorship, and legal signatures. Furthermore, changes in the underlying source tables could mutate historical records.
+Opening `Observation` and `DiagnosticReport` to direct federated querying would point clinical search traffic straight at operational source systems, widen the attack surface, and discard the provenance, institutional authorship and legal signature that make a result citable in the first place. There is a subtler cost as well: a record assembled on the fly from live source tables changes whenever those tables change, so what a clinician read last year cannot reliably be reproduced today.
 
 ### 2.3 The Mandated Solution: FHIR Document Bundles (`Bundle.type = #document`)
 The Belgian Interhub standard mandates that **all shared clinical payloads are strictly exchanged as FHIR Bundles of type `document`**:
@@ -81,7 +81,7 @@ flowchart LR
 ```
 
 * **Lightweight Querying**: Searching `DocumentReference` across multiple federated hubs returns small, highly indexable metadata records containing patient SSIN, CD-TRANSACTION category, LOINC type, author, date, and access rules.
-* **On-Demand Retrieval**: The consumer fetches the full document payload (`Bundle` type = `document`) only when the clinician requests it, drastically reducing network bandwidth and hub resource utilization.
+* **On-Demand Retrieval**: The consumer fetches the full document payload (`Bundle` type = `document`) only when the clinician asks to see it, which keeps bandwidth and hub load proportional to what is actually read.
 
 ---
 

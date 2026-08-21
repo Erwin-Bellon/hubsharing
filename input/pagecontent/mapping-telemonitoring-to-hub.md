@@ -8,9 +8,9 @@
 
 ## 1. Overview & Business Context
 
-In the Belgian healthcare landscape, telemonitoring (remote patient monitoring - TMP) is expanding rapidly across chronic care programs, post-discharge tracking, cardiology (e.g. ambulatory Holter monitoring), diabetes care, and oncology. Telemonitoring platforms collect continuous and episodic sensor data, patient-reported outcome measures (PROMs), and automated diagnostic evaluations.
+Telemonitoring, or remote patient monitoring (TMP), is growing quickly in Belgium: chronic care programmes, post-discharge follow-up, ambulatory Holter monitoring in cardiology, diabetes care, oncology. The platforms behind them produce a steady stream of continuous and episodic sensor data, patient-reported outcome measures (PROMs) and automated diagnostic evaluations.
 
-To ensure that telemonitoring results become part of the longitudinal patient record accessible to all treating physicians across the Belgian federated hubs (CoZo, RSW, BHN, Zodap — see [Architecture §1](architecture.html#1-the-belgian-federated-health-ecosystem)), telemonitoring data is published as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** categorized under `CD-TRANSACTION` code `telemonitoring`. The document-bundle paradigm is justified in [Design Rationale](resource-considerations.html#2-evaluation-of-evaluated-carrier-paradigms) and constrained normatively in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document).
+None of that is clinically useful while it stays inside the monitoring platform. To make telemonitoring results part of the longitudinal patient record, readable by every treating physician across the Belgian federated hubs (CoZo, RSW, BHN, Zodap — see [Architecture §1](architecture.html#1-the-belgian-federated-health-ecosystem)), telemonitoring data is published as **self-contained FHIR Document Bundles (`Bundle.type = #document`)** categorized under `CD-TRANSACTION` code `telemonitoring`. The document-bundle paradigm is justified in [Design Rationale](resource-considerations.html#2-evaluation-of-candidate-carrier-paradigms) and constrained normatively in [Transactions §3.3](transactions.html#33-payload-structure-strictly-fhir-bundles-of-type-document).
 
 ---
 
@@ -22,11 +22,11 @@ flowchart TD
         direction TB
 
         subgraph RootComp["<b>entry[0] : BeTelemonitoringComposition (Root Composition)</b>"]
-            CompData["• type: LOINC 10185-7 ('Holter study')<br/>• category: CD-TRANSACTION #telemonitoring<br/>• status: #final<br/>• title: '24-Hour Continuous Ambulatory ECG Monitoring Summary'<br/>• section[0]: 'Holter Monitoring Results'<br/>&nbsp;&nbsp;↳ narrative text.div (XHTML)"]
+            CompData["• type: LOINC 18754-2 ('Ambulatory cardiac rhythm monitor (Holter) study')<br/>• category: CD-TRANSACTION #telemonitoring<br/>• status: #final<br/>• title: '24-Hour Continuous Ambulatory ECG Monitoring Summary'<br/>• section[0]: 'Holter Monitoring Results'<br/>&nbsp;&nbsp;↳ narrative text.div (XHTML)"]
         end
 
         subgraph TMDiagRep["<b>entry[1] : TelemonitoringDiagnosticReport</b>"]
-            RepData["• extension[telemonitoringId]: 'tm-holter-001'<br/>• extension[carepath]: 'holter-monitoring' (v1.0)<br/>• extension[prescriberApplication]: 'TeleMonApp v2.1'<br/>• code: LOINC 10185-7 ('Holter study')<br/>• presentedForm: PDF attachment URL"]
+            RepData["• extension[telemonitoringId]: 'tm-holter-001'<br/>• extension[carepath]: 'holter-monitoring' (v1.0)<br/>• extension[prescriberApplication]: 'TeleMonApp v2.1'<br/>• code: LOINC 18754-2 ('Ambulatory cardiac rhythm monitor (Holter) study')<br/>• presentedForm: PDF attachment URL"]
         end
 
         subgraph DiscreteEntries["<b>entry[2..N] : Telemetry Observations, Devices & Context</b>"]
@@ -58,12 +58,12 @@ flowchart TD
 
 ## 3. Mapping from Proprietary TMP JSON to FHIR Document
 
-The Belgian Telemonitoring Project (TMP) transmits proprietary JSON messages between device vendors, monitoring apps, and hub source platforms (hospitals, home-care organisations, monitoring centres) — a complete example of such a source message is shown in [TMP Base Message](tmp-base-message.html). Below is the normative transformation into FHIR structures:
+The Belgian Telemonitoring Project (TMP) moves proprietary JSON messages between device vendors, monitoring applications and hub source platforms such as hospitals, home-care organisations and monitoring centres; a complete example of one is shown in [TMP Base Message](tmp-base-message.html). The normative transformation into FHIR structures runs as follows:
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph TMP["<b>Proprietary TMP JSON Message</b>"]
-        direction TB
+        direction LR
         T1["telemonitoringId"]
         T2["carepath (id, version)"]
         T3["prescriberApplication"]
@@ -74,7 +74,7 @@ flowchart LR
     end
 
     subgraph FHIR["<b>Belgian Telemonitoring Document Bundle</b>"]
-        direction TB
+        direction LR
         F1["<b>BeTelemonitoringComposition</b><br/>• author: Practitioner(prescriber)<br/>• subject: Patient(patientId)<br/>• type: service (LOINC)"]
         F2["<b>TelemonitoringDiagnosticReport</b><br/>• ext: telemonitoring-id<br/>• ext: carepath<br/>• ext: prescriber-application<br/>• presentedForm: attachments[]"]
         F3["<b>Observation & Device</b><br/>• Mean Heart Rate<br/>• Holter Monitoring Device"]
@@ -101,7 +101,7 @@ flowchart LR
 When published to the regional hub, the telemonitoring session is discoverable via `BeInterhubDocumentReference`. Only the telemonitoring-specific *values* are given here; the cardinality and meaning of each element are specified in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), and the search that returns it in [Transactions §2](transactions.html#2-transaction-1-gettransactionlist-mhd-iti-67-find-documentreferences):
 
 * `category`: `https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring`
-* `type`: `http://loinc.org#10185-7` ("Holter study")
+* `type`: `http://loinc.org#18754-2` ("Ambulatory cardiac rhythm monitor (Holter) study")
 * `subject`: Patient SSIN (`79080412345`)
 * `content.attachment.contentType`: `application/fhir+json`
 * `content.attachment.url`: `https://hub.cozo.be/fhir/Bundle/bundle-telemonitoring-example-01`
@@ -149,8 +149,8 @@ Below is a complete, valid example of a shared Telemonitoring FHIR Document Bund
           "coding": [
             {
               "system": "http://loinc.org",
-              "code": "10185-7",
-              "display": "Holter study"
+              "code": "18754-2",
+              "display": "Ambulatory cardiac rhythm monitor (Holter) study"
             }
           ]
         },
@@ -221,8 +221,8 @@ Below is a complete, valid example of a shared Telemonitoring FHIR Document Bund
           "coding": [
             {
               "system": "http://loinc.org",
-              "code": "10185-7",
-              "display": "Holter study"
+              "code": "18754-2",
+              "display": "Ambulatory cardiac rhythm monitor (Holter) study"
             }
           ]
         },

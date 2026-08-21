@@ -8,10 +8,11 @@
 
 ## 1. Overview of the Metadata Model
 
-In the Belgian Interhub ecosystem, document discovery is strictly separated from document retrieval — the reasoning behind that separation is recorded in [Design Rationale §3](resource-considerations.html#3-the-role-of-documentreference-as-discovery-envelope). When querying for available health records (`getTransactionList`, specified in [Transactions §2](transactions.html#2-transaction-1-gettransactionlist-mhd-iti-67-find-documentreferences)), client applications receive a lightweight metadata envelope: the **`BeInterhubDocumentReference`**.
+Discovery and retrieval are strictly separated in Interhub; the reasoning behind that separation is recorded in [Design Rationale §3](resource-considerations.html#3-the-role-of-documentreference-as-discovery-envelope). A client querying for available health records (`getTransactionList`, specified in [Transactions §2](transactions.html#2-transaction-1-gettransactionlist-mhd-iti-67-find-documentreferences)) receives no clinical content at all. What comes back is a lightweight metadata envelope, the **`BeInterhubDocumentReference`**.
 
 ```mermaid
 classDiagram
+    direction LR
     class BeInterhubDocumentReference {
         +masterIdentifier: Identifier (RFC 3986 URI)
         +identifier[uniqueId]: Identifier (RFC 3986 URI)
@@ -79,7 +80,7 @@ classDiagram
     BeInterhubDocumentReference --> SubjectPatient : subject
     BeInterhubDocumentReference --> AuthorList : author[]
     BeInterhubDocumentReference --> RelatesToTarget : relatesTo.target
-    AuthorList *-- BeExtHcPartyType : extension[hcPartyType]
+    BeExtHcPartyType --* AuthorList : extension[hcPartyType]
 ```
 
 This metadata envelope provides:
@@ -105,7 +106,7 @@ Every row below is normative for Belgian Interhub exchanges. The legacy KMEHR an
 | **`status`** | `1..1` | `code` | Metadata lifecycle status: `current` (approved and active), `superseded` (replaced by a newer version), or `entered-in-error`. |
 | **`docStatus`** | `0..1` | `code` | Clinical status of the underlying document: `preliminary`, `final`, `amended`. Mapped from KMEHR `iscomplete` / `isvalidated`. |
 | **`category[cdTransaction]`** | `1..1` | `CodeableConcept` | Document category. The Belgian `CD-TRANSACTION` coding (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction`, OID `1.3.6.1.4.1.21297.100.3.1`) is **mandatory** — examples: `sumehr`, `labresult`, `discharge`, `telemonitoring`, `note`, `referral`. **Additional codings of the same category from other code systems (local hub source catalogues, regional or LOINC/SNOMED CT equivalents) are explicitly allowed in the same `CodeableConcept`** — see [§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept). |
-| **`type`** | `1..1` | `CodeableConcept` | Precise clinical document type. At least one coding SHOULD be LOINC (e.g., `11502-2` for Laboratory Report, `10185-7` for Holter Study, `34133-9` for Summarization of Episode) for EHDS compatibility; Belgian national and local document-type codings MAY be carried alongside it in the same `CodeableConcept` ([§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept)). |
+| **`type`** | `1..1` | `CodeableConcept` | Precise clinical document type. At least one coding SHOULD be LOINC (e.g., `11502-2` for Laboratory Report, `18754-2` for Holter Study, `34133-9` for Summarization of Episode) for EHDS compatibility; Belgian national and local document-type codings MAY be carried alongside it in the same `CodeableConcept` ([§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept)). |
 | **`subject`** | `1..1` | `Reference(Patient)` | Reference to the patient. The referenced Patient resource must contain the official Belgian Social Security Identification Number (**SSIN / INSS**), and `subject.identifier` SHOULD repeat that SSIN inline so that a search result is usable without resolving the reference ([§4.3](#43-logical-references-identifiers-instead-of-round-trips)). |
 | **`date`** | `1..1` | `instant` | Timestamp when the document metadata entry was created/indexed, standardized in **UTC (Z)** format (ISO 8601 `YYYY-MM-DDThh:mm:ssZ`). |
 | **`author`** | `1..*` | `Reference(Practitioner \| PractitionerRole \| Organization \| Device \| Patient \| RelatedPerson)` | Sequence of authors. In Belgian Hub rules, author references follow a specific order of granularity: (1) Answering Hub, (2) Originating Hub Source Organisation, (3) Authoring Practitioner / Physician. **Every KMEHR `CD-HCPARTY` party type can be represented** — see the mapping in [§3.5](#35-healthcare-party-type-beexthcpartytype). Each author carries its `CD-HCPARTY` type inline in `author.extension[hcPartyType]`, its business identifier in `author.identifier`, and its name in `author.display`. |
@@ -134,7 +135,7 @@ Every row below is normative for Belgian Interhub exchanges. The legacy KMEHR an
 * **Purpose**: Identifies the regional hub responsible for managing the document. Essential for cross-community federation, allowing initiating gateways to route retrieve calls to the correct responding hub. The routing mechanics that consume this value are described in [Architecture §3.2](architecture.html#32-routing-mechanics-via-homecommunityid), and its role in the multi-hub model versus the single-NCP European model in [EHDS Alignment §3.1](ehds-alignment.html#3-belgian-advancements-beyond-baseline-ehds).
 
 ### 3.2 Belgian Patient Access Metadata (`BeExtPatientAccess`)
-In the Belgian healthcare system, patients have a legal right to access their medical records via certified national/regional portals (e.g. MaSanté / MijnGezondheid). However, physicians may withhold or delay document release under specific clinical circumstances (therapeutic exception or pending consultation).
+Belgian patients hold a legal right of access to their own medical records through certified national and regional portals such as MaSanté and MijnGezondheid. That right is not unconditional: a physician may delay or withhold a document under therapeutic exception, or until the findings have been discussed face to face.
 
 This extension *carries* the rule; enforcing it is the initiating hub's responsibility, as set out in [Security & Authentication §1.1](security.html#11-trust-model-access-control-is-the-initiating-hubs-responsibility). How it is applied at the European border is described in [EHDS Alignment §3.2](ehds-alignment.html#32-granular-patient-access-governance-beextpatientaccess).
 
@@ -165,7 +166,7 @@ For cross-enterprise transmissions requiring application-level encryption:
 * **Purpose**: Records the exact timestamp when the document was persisted in the originating hub source system (corresponds to KMEHR `recorddatetime`).
 
 ### 3.5 Healthcare Party Type (`BeExtHcPartyType`)
-KMEHR carried the nature of every party inline, in `hcparty/cd[@S="CD-HCPARTY"]`. FHIR normally expresses it on the referenced resource (`Organization.type`, `PractitionerRole.code`), which would force a consumer to resolve every author of every search result just to know whether it is a laboratory, a retirement home or a piece of software. This extension keeps that information **in the envelope**, next to the reference.
+KMEHR carried the nature of every party inline, in `hcparty/cd[@S="CD-HCPARTY"]`. FHIR normally expresses it on the referenced resource instead (`Organization.type`, `PractitionerRole.code`), which would force a consumer to resolve every author of every search result merely to learn whether it is a laboratory, a retirement home or a piece of software. This extension keeps that information **in the envelope**, next to the reference where the consumer already is.
 
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-hcparty-type`
 * **Context**: `DocumentReference.author`, `DocumentReference.authenticator`, `DocumentReference.custodian`, `Composition.author`, `Composition.attester.party`, `Composition.custodian`
@@ -251,7 +252,7 @@ A hub source rarely has only one name for a document. The same discharge report 
 
 ### 4.3 Logical References: Identifiers Instead of Round-Trips
 
-A `getTransactionList` response can hold hundreds of entries. If each entry only carried literal references (`"reference": "Organization/1234"`), a consumer would have to issue one extra request per author, per custodian and per related document, across a federated network of hubs — the classic **N+1 query problem**, with the added cost that the target may live in another hub entirely.
+A `getTransactionList` response can hold hundreds of entries. Were each entry to carry nothing but literal references (`"reference": "Organization/1234"`), a consumer would owe one extra request per author, per custodian and per related document, spread across a federated network of hubs. That is the classic **N+1 query problem**, aggravated here by the fact that the target may live in an entirely different hub.
 
 The Belgian Interhub envelope is therefore designed to be **self-sufficient**: every reference in a `BeInterhubDocumentReference` SHOULD carry enough inline data to be displayed, filtered and matched without dereferencing.
 

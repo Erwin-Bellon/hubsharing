@@ -75,7 +75,7 @@ The `Authorization: Bearer` token above is obtained through one of the three con
 | :--- | :--- | :--- | :--- |
 | **`patient.identifier`** *(Mandatory)* | `token` (`system\|value`) | `folder/patient/id[@S="INSS"]` | Patient's national Social Security Identification Number (SSIN). Systems must support both `https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin` and `urn:oid:1.3.6.1.4.1.21297.100.1.1`. |
 | **`category`** *(Optional)* | `token` (`system\|code`) | `transaction/cd[@S="CD-TRANSACTION"]` | Filters by Belgian document category (e.g. `sumehr`, `labresult`, `discharge`, `telemonitoring`). |
-| **`type`** *(Optional)* | `token` (`system\|code`) | `transaction/cd[@S="CD-CLINICAL"]` | Filters by clinical LOINC code (e.g. `http://loinc.org\|11502-2` for Lab Report, `http://loinc.org\|10185-7` for Holter Study). |
+| **`type`** *(Optional)* | `token` (`system\|code`) | `transaction/cd[@S="CD-CLINICAL"]` | Filters by clinical LOINC code (e.g. `http://loinc.org\|11502-2` for Lab Report, `http://loinc.org\|18754-2` for Holter Study). |
 | **`date`** *(Optional)* | `date` (`ge`, `le`, `gt`, `lt`) | `transaction/date` & `time` | Filters document creation timestamp within a date/time range. |
 | **`author.identifier`** *(Optional)* | `token` (`system\|value`) | `transaction/author/hcparty/id` | Filters by authoring physician NIHDI (`1.3.6.1.4.1.21297.100.9.1`) or institution NIHDI (`100.11.1`). |
 | **`status`** *(Optional)* | `token` (`current`, `superseded`) | Document execution status | Filter on metadata status. Defaults to `current`. |
@@ -191,9 +191,9 @@ Each entry conforms to `BeInterhubDocumentReference`; refer to [Envelope & Metad
 
 ### 2.4 Downstream System Unavailability, Partial Failures & OperationOutcome Handling
 
-In a federated healthcare ecosystem, executing a document discovery query (`getTransactionList` / MHD ITI-67) requires the responding eHealth Hub to query numerous underlying hub sources — hospital EHRs, independent laboratory information systems (LIS), pharmacy and practice software, care homes — and remote partner hubs.
+A single discovery query fans out. To answer one `getTransactionList` (MHD ITI-67), the responding hub interrogates hospital EHRs, independent laboratory information systems, pharmacy and practice software, care homes and remote partner hubs, then merges whatever comes back.
 
-In real-world operations, one or more connected downstream systems may be temporarily unavailable—for instance, undergoing scheduled maintenance, experiencing network partition, or failing to respond within configured SLA timeout windows.
+Some of them will not come back. A system may be in scheduled maintenance, sitting behind a network partition, or simply slower than the configured SLA timeout. In a federation of this size that is ordinary operation rather than an error condition, and the specification treats it accordingly.
 
 ```mermaid
 sequenceDiagram
@@ -211,8 +211,8 @@ sequenceDiagram
         Gateway->>SrcC: Query documents for patient
     end
     Lab1-->>Gateway: 200 OK (2 DocumentReferences found)
-    Note over Lab2,Gateway: ⚠️ Connection Timeout (SLA exceeded)
-    SrcC-->>Gateway: ⚠️ HTTP 503 Service Unavailable (Maintenance)
+    Note over Lab2,Gateway: Connection Timeout (SLA exceeded)
+    SrcC-->>Gateway: HTTP 503 Service Unavailable (Maintenance)
 
     Note over Gateway: Merges available DocumentReferences<br/>Constructs OperationOutcome for failed systems<br/>Sets search.mode = #outcome
     Gateway-->>Clinician: HTTP 200 OK (Bundle type=searchset)<br/>• entry[0..1]: DocumentReference (search.mode = match)<br/>• entry[2]: OperationOutcome (search.mode = outcome)
@@ -234,13 +234,13 @@ Each failing or timed-out downstream system generates an entry in the `Operation
 | `OperationOutcome.issue` Field | Value / Datatype | Description & Usage |
 | :--- | :--- | :--- |
 | **`severity`** | `code` (`warning` \| `information`) | Fixed to `warning` for partial failures where other document records are returned. |
-| **`code`** | `code` (`timeout` \| `transient` \| `exception` \| `suppressed`) | `timeout`: Downstream system exceeded SLA response time.<br>`transient`: System down for maintenance (HTTP 503).<br>`exception`: Unexpected internal subsystem error.<br>`suppressed`: Downstream system returned a partial result set for its own local reasons. |
+| **`code`** | `code` (`timeout` \| `transient` \| `exception` \| `suppressed`) | `timeout`: Downstream system exceeded SLA response time.<br/>`transient`: System down for maintenance (HTTP 503).<br/>`exception`: Unexpected internal subsystem error.<br/>`suppressed`: Downstream system returned a partial result set for its own local reasons. |
 | **`details`** | `CodeableConcept` | Standard issue type from `http://terminology.hl7.org/CodeSystem/issue-type` with a human-readable text description. |
 | **`diagnostics`** | `string` | Diagnostic text explicitly identifying the failing repository/system (including NIHDI license, CBE number, or URI) and stating that records from that location could not be included. |
 
 #### 2.4.3 Complete Searchset Bundle Example with OperationOutcome
 
-Below is a complete example of an HTTP 200 OK searchset response containing two matched laboratory document references and an embedded `OperationOutcome` indicating partial downstream timeouts:
+Below is a complete HTTP 200 OK searchset response: one matched laboratory document reference, plus an embedded `OperationOutcome` reporting the downstream systems that did not answer.
 
 ```json
 {
@@ -346,11 +346,11 @@ Below is a complete example of an HTTP 200 OK searchset response containing two 
 
 #### 2.4.4 Consuming Client & EHR Responsibilities
 
-Consuming EHR systems, clinical portals, and mobile applications consuming `getTransactionList` (MHD ITI-67) **MUST implement the following client behaviors**:
+EHR systems, clinical portals and mobile applications consuming `getTransactionList` (MHD ITI-67) **MUST implement the following client behaviours**:
 
 1. **Inspect `search.mode = "outcome"`**: Client parsers must actively scan the `Bundle.entry` array for resources with `resourceType == "OperationOutcome"` (or `search.mode == "outcome"`).
 2. **Display Clinical Alert Banners**: When an `OperationOutcome` with severity `warning` is returned, the client user interface MUST present a prominent, non-blocking warning banner to the clinician:
-   > ⚠️ **Notice: Document List Incomplete**  
+   > **Notice: document list incomplete**  
    > *One or more connected clinical repositories did not respond (e.g. system maintenance or timeout). Some historical patient documents may not appear in this list.*
 3. **Auditability**: The client system SHOULD log the diagnostics in local access audit logs so support desks can diagnose why specific records were temporarily omitted.
 
@@ -359,7 +359,7 @@ Consuming EHR systems, clinical portals, and mobile applications consuming `getT
 ## 3. Transaction 2: `getTransaction` (MHD ITI-68 `Retrieve Document`)
 
 ### 3.1 Trigger & Scope
-Triggered when a consumer selects a document from the search results to view or import the full clinical payload. As with ITI-67, the access decision was already taken by the initiating hub; the responding hub authenticates the calling hub, serves the payload, and logs the retrieval.
+This transaction fires when a consumer picks a document out of the search results and wants the full clinical payload, either to read it or to import it. As with ITI-67, the access decision was already taken by the initiating hub; the responding hub authenticates the caller, serves the payload and logs the retrieval.
 
 ### 3.2 HTTP Interaction
 
@@ -411,7 +411,7 @@ flowchart TD
 * **Narrative Requirement (`Composition.section.text`)**: In accordance with FHIR and Belgian clinical safety guidelines, every section MUST include human-readable XHTML narrative (`status = #generated` or `#extensions`), ensuring safe rendering on any clinical workstation.
 * **Completeness**: The document bundle must be **self-contained**. All resources referenced in the Composition sections must be bundled inside the `Bundle.entry` array.
 
-Why documents rather than FHIR messaging or granular resource access: [Design Rationale](resource-considerations.html#2-evaluation-of-evaluated-carrier-paradigms). Complete worked payloads for both supported document types: [Laboratory Reports §5](lab-report-sharing.html#5-complete-json-document-walkthrough) and [Telemonitoring §5](mapping-telemonitoring-to-hub.html#5-complete-json-document-walkthrough).
+Why documents rather than FHIR messaging or granular resource access: [Design Rationale](resource-considerations.html#2-evaluation-of-candidate-carrier-paradigms). Complete worked payloads for both supported document types: [Laboratory Reports §5](lab-report-sharing.html#5-complete-json-document-walkthrough) and [Telemonitoring §5](mapping-telemonitoring-to-hub.html#5-complete-json-document-walkthrough).
 
 ---
 

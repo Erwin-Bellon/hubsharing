@@ -155,7 +155,7 @@ Usage: #example
 * status = #current
 * docStatus = #final
 * category[cdTransaction].coding[cdTransactionCode] = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring "Telemonitoring / Remote Patient Monitoring"
-* type.coding[0] = $LNC#10185-7 "Holter study"
+* type.coding[0] = $LNC#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
 * subject = Reference(PatientPeeters)
 * subject.identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"
 * subject.identifier.value = "79080412345"
@@ -341,7 +341,7 @@ Usage: #example
 * identifier.system = "https://uzleuven.be/telemonitoring/compositions"
 * identifier.value = "COMP-TM-2026-001"
 * status = #final
-* type = $LNC#10185-7 "Holter study"
+* type = $LNC#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
 * category = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring "Telemonitoring / Remote Patient Monitoring"
 * subject = Reference(PatientPeeters)
 * date = "2026-01-02T08:30:00Z"

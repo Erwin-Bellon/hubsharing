@@ -8,7 +8,7 @@
 
 ## 1. The Belgian Federated Health Ecosystem
 
-The Belgian healthcare infrastructure is built upon a **federated, decentralized architecture** governed by the eHealth Platform (`ehealth.fgov.be`). Unlike centralized national repositories, clinical data in Belgium resides locally in the **hub sources** — the source systems of the care organisations that produce it (hospitals, independent laboratories, pharmacies, polyclinics, practice organisations, care homes, and every other organisation type of the KMEHR `CD-HCPARTY` classification) — and is indexed and routed by the regional hubs.
+Belgium never built a central national repository, and that decision still shapes everything downstream. Under the governance of the eHealth Platform (`ehealth.fgov.be`), clinical data stays where it was produced: in the **hub sources**, meaning the source systems of the care organisations themselves — hospitals, independent laboratories, pharmacies, polyclinics, practice organisations, care homes, and every other organisation type in the KMEHR `CD-HCPARTY` classification. The regional hubs index that data and route requests to it. They do not hold it.
 
 ### 1.1 Key Actors & Nodes in the Network
 
@@ -56,7 +56,7 @@ flowchart TD
 
 ### 1.2 What Counts as a Hub Source
 
-A **hub source** is any care organisation whose source system publishes documents to, and answers retrievals for, a hub. Hospitals are one example among many: the KMEHR `CD-HCPARTY` organisation types show the actual range.
+A **hub source** is any care organisation whose source system publishes documents to a hub and answers retrievals from it. Hospitals are one example among many; the KMEHR `CD-HCPARTY` organisation types give the real range.
 
 | Code | Organisation type | Code | Organisation type |
 | :--- | :--- | :--- | :--- |
@@ -76,7 +76,7 @@ Throughout this implementation guide, **"hub source"** designates this entire cl
 
 Historically, Interhub communication was specified using SOAP Web Services exchanging XML payloads conforming to Belgian **KMEHR** schemas (`getTransactionList`, `getTransaction`, `putTransaction`, `getTransactionAccessList`).
 
-The modernized Belgian Interhub specification adopts **IHE MHD (Mobile access to Health Documents)** on **HL7® FHIR® R4**, creating a standardized, RESTful architecture:
+In their place, the modernized Belgian Interhub specification puts **IHE MHD (Mobile access to Health Documents)** on **HL7® FHIR® R4**, giving the exchange a RESTful shape:
 
 ```mermaid
 flowchart TD
@@ -100,13 +100,13 @@ flowchart TD
     Responder -->|"Cross-Border Exchange"| EHDS
 ```
 
-The diagram shows the *shape* of the exchange only. Each layer of it is specified on its own page: the **metadata layer** element by element in [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), the **two transactions** (ITI-67 / ITI-68) in [Transactions](transactions.html), the **cross-border branch** in [EHDS Alignment](ehds-alignment.html), and the reasoning behind carrying payloads as document bundles at all in [Design Rationale](resource-considerations.html#2-evaluation-of-evaluated-carrier-paradigms).
+The diagram shows the *shape* of the exchange only. Each layer of it is specified on its own page: the **metadata layer** element by element in [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference), the **two transactions** (ITI-67 / ITI-68) in [Transactions](transactions.html), the **cross-border branch** in [EHDS Alignment](ehds-alignment.html), and the reasoning behind carrying payloads as document bundles at all in [Design Rationale](resource-considerations.html#2-evaluation-of-candidate-carrier-paradigms).
 
 ---
 
 ## 3. Federated Cross-Hub Routing & Identifiers
 
-In a cross-hub scenario, an **Initiating Hub** queries or retrieves documents from one or more **Responding Hubs**. Responding hubs inherently trust the calling hub: the initiating hub has already performed access control locally (see §5). Routing is governed by standardized identifiers registered in the Belgian eHealth OID tree (`1.3.6.1.4.1.21297`):
+In a cross-hub exchange, an **initiating hub** queries or retrieves documents from one or more **responding hubs**. The responding hubs trust the caller: access control has already happened locally, at the initiating hub (see §5). What governs the routing itself is a set of standardized identifiers registered in the Belgian eHealth OID tree (`1.3.6.1.4.1.21297`):
 
 ### 3.1 Belgian National Identifiers
 
@@ -136,7 +136,7 @@ The query syntax for step 1 and the retrieval call for step 2 are specified in [
 
 ## 4. Dual-Stack Gateway Architecture (Transition Phase)
 
-To enable smooth migration without breaking legacy integrations, Belgian Hubs deploy a **Dual-Stack Mediation Gateway**:
+Migration cannot be a flag day. KMEHR connectors in production will outlive the specification that replaces them, so Belgian hubs deploy a **dual-stack mediation gateway** that speaks both protocols at once:
 
 * **Legacy KMEHR Client → Modern FHIR Hub**: The gateway receives SOAP `getTransactionList` or `getTransaction` requests, queries the internal FHIR registry/repository via MHD ITI-67 / ITI-68, and transforms the resulting `DocumentReference` and `Bundle (type=document)` back into KMEHR `TransactionSummaryType` or `FolderType` XML.
 * **Modern FHIR Client → Legacy KMEHR Hub Source**: The gateway accepts RESTful MHD searches and GET requests, translates them into SOAP KMEHR Web Service calls to legacy hub source systems, transforms the returned KMEHR XML / attachments into standardized FHIR Document Bundles, and returns them to the client.
@@ -149,18 +149,18 @@ The field-by-field transformation rules the gateway applies in both directions �
 
 > **This section is a summary.** The normative security specification — the three routes in full, DPoP / RFC 9421 tamper-proofing, the initiating/responding responsibility split, and IHE BALP auditing — is on the [Security & Authentication](security.html) page and takes precedence over the overview below.
 
-All Interhub transactions operate under strict Belgian healthcare regulations, the Patient Rights Act, and GDPR compliance.
+Every Interhub transaction takes place under Belgian healthcare law, the Patient Rights Act and the GDPR.
 
 ### 5.1 Trust Model: the Initiating Hub Owns Access Control
 
-Interhub is a **federation of mutually trusted hubs**. A responding hub authenticates *which hub* is calling and then answers the request; it does not re-evaluate whether the end user behind the call is entitled to the patient's data.
+Interhub is a **federation of mutually trusted hubs**. A responding hub establishes *which hub* is calling and then answers the request. It does not re-open the question of whether the end user behind that call is entitled to the patient's data.
 
 * The **initiating hub** performs all access control before emitting an Interhub request — for example by querying the **Metahub** to confirm that an informed consent (IC) and/or therapeutic link exists, or by resolving the same facts from its own local database. The mechanism is a local matter and out of scope for this specification.
 * The **responding hub** performs technical validation only (mTLS and calling-hub authentication, replay/tamper-proofing, query syntax) and writes its audit trail. It does not verify consent, therapeutic links, or practitioner entitlement.
 
 ### 5.2 Connection Routes
 
-The security architecture provides three distinct connection routes to authenticate the calling hub. 
+Three distinct connection routes are on the table for authenticating the calling hub.
 
 > **Important Architectural Note**: The three connection models presented below represent an **architectural proposal**. The final Belgian Interhub standard will **select and mandate one of these three methods** as the unified national authentication framework.
 
@@ -181,7 +181,7 @@ flowchart LR
 2. **Route 2: eHealth Platform IAM (machine-to-machine)**: Centralized authentication of the calling hub through the national eHealth IAM using the **OAuth 2.0 client credentials** grant and the hub's **eHealth enterprise certificate**. Interhub is system-to-system traffic, so this route involves **no eID or itsme® authentication**: the token identifies the calling hub organisation (CBE / hub OID), and practitioner details travel only as audit claims.
 3. **Route 3: STS Token Exchange Bridge**: Seamless backward compatibility bridge translating legacy SOAP WS-Trust / SAML 2.0 assertions from the eHealth STS into short-lived OAuth 2.0 JWTs (RFC 8693).
 
-In addition, to replace legacy SOAP SAML request signatures and guard against replay attacks and query parameter manipulation in the RESTful FHIR space, all routes evaluate **DPoP (RFC 9449)** and **RFC 9421 (HTTP Message Signatures)**.
+Whichever route is chosen, the legacy SOAP SAML request signature still needs a successor. All three routes are therefore evaluated together with **DPoP (RFC 9449)** and **RFC 9421 (HTTP Message Signatures)**, which close off replay and query-parameter manipulation in the RESTful world.
 
 For complete technical specifications, see **[Security & Authentication](security.html)** (normative) and the **[End-to-End Encryption](end-to-end-encryption.html)** discussion paper (non-normative).
 

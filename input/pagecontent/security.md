@@ -10,19 +10,19 @@
 
 This page specifies security for **Interhub connections only**: the hub-to-hub channel between an **initiating hub** and a **responding hub**. It does not specify how a hub decides whether a given practitioner may see a given patient's records — that decision belongs entirely to the initiating hub (see §1.1).
 
-Transitioning from legacy SOAP/WS-Security protocols to RESTful HL7® FHIR® requires modernizing authentication and transport security while maintaining full compliance with Belgian health privacy laws, GDPR, and medical confidentiality.
+Moving from SOAP with WS-Security to RESTful HL7® FHIR® replaces the mechanisms but not the obligations. Belgian health privacy law, the GDPR and medical confidentiality apply exactly as before; only the way they are enforced on the wire changes.
 
 The security architecture of the Belgian Interhub FHIR ecosystem is based on four foundational pillars:
 1. **Transport Layer Security**: Mandatory **TLS 1.3** (or TLS 1.2 with strict cipher suites) with mutual certificate authentication (**mTLS**) using official Belgian eHealth organization certificates.
 2. **Three Hub Authentication Routes (Proposal)**: Flexible connection models evaluating direct Hub-to-Hub federation, the national eHealth IAM infrastructure, and a bridge for legacy systems via Security Token Service (STS) token exchange. These routes establish **which hub is calling**, nothing more.
 3. **Replay & Query Tamper-Proofing**: Application-layer cryptographic request binding via **DPoP (RFC 9449)** or **RFC 9421 (HTTP Message Signatures)**, replacing legacy SOAP SAML signatures to prevent query tampering and replay attacks.
-4. **Auditability & Traceability**: Comprehensive audit logging conforming to **IHE BALP (Basic Audit Logging Pattern)** and **IHE ATNA (Audit Trail and Node Authentication)**, fulfilling the legal requirements of the legacy `getTransactionAccessList` service.
+4. **Auditability & Traceability**: Audit logging conforming to **IHE BALP (Basic Audit Logging Pattern)** and **IHE ATNA (Audit Trail and Node Authentication)**, which carries the legal obligations previously discharged by the `getTransactionAccessList` service.
 
 Payload (application-layer) encryption is deliberately **not** one of these pillars. Whether Belgium should keep KMEHR-style end-to-end encryption in FHIR is an open architectural question, analysed separately in [End-to-End Encryption](end-to-end-encryption.html#4-architectural-analysis-should-belgium-continue-e2ee-in-fhir).
 
 ### 1.1 Trust Model: Access Control Is the Initiating Hub's Responsibility
 
-Interhub is a **trusted federation of hubs**. Once a responding hub has authenticated the calling hub (mTLS plus one of the three routes below), it **inherently trusts that hub** and answers the request. A responding hub does **not** re-evaluate whether the end user behind the request is entitled to the patient's data.
+Interhub is a **trusted federation of hubs**. Once a responding hub has authenticated the calling hub — mTLS plus one of the three routes below — it **trusts that hub** and answers the request. It does **not** re-open the question of whether the end user behind the request is entitled to the patient's data. That question was settled before the request was ever sent.
 
 * **The initiating hub performs all access control**, before it issues any Interhub call. How it does so is a local matter and outside the scope of this specification. For example, a hub may query the **Metahub** to confirm that an informed consent (IC) and/or a therapeutic link exists for the patient/practitioner pair, or it may resolve the same facts from its own local database and local patient/practitioner administration.
 * **The responding hub performs technical validation only**: transport and hub authentication, request freshness and tamper-proofing, syntactic validity of the query, and audit logging. It does not verify informed consent, therapeutic links, practitioner entitlement, or end-user roles, and it does not issue access decisions on the initiating hub's behalf.
@@ -49,7 +49,7 @@ flowchart LR
 
 ## 2. The Three Authentication & Connection Routes (Proposal)
 
-To accommodate various client environments (modern cloud EHRs, regional hub nodes, mobile applications, and legacy hub source middleware), the Belgian Interhub specification evaluates **three distinct authentication routes**. All three answer a single question — *which hub is calling, and is the request untampered?* — and none of them carries an access decision about the patient's records. 
+Client environments differ widely: cloud-native EHRs, regional hub nodes, mobile applications and legacy hub source middleware all need a way in. The Belgian Interhub specification therefore evaluates **three distinct authentication routes**. All three answer one question, *which hub is calling, and is the request untampered?*, and none of them carries an access decision about the patient's records.
 
 > **Important Architectural Note**: Presenting three connection models is **an architectural proposal**. For the final normative standard, the Belgian healthcare ecosystem **must pick one of these three methods** as the unified national authentication framework.
 
@@ -80,7 +80,7 @@ flowchart TD
 
 ### 2.1 Route 1: Hub/Enterprise-Issued JWT Bearer Tokens (Federated Trust)
 
-In this route, eHealth Hubs (e.g. CoZo, RSW, BHN, Zodap) or major healthcare enterprises operate their own **OAuth 2.0 token issuers**. Trust between hubs is established bilaterally or through a national hub federation trust registry. The token asserts the identity of the calling hub and carries the contextual claims needed for the responding hub's audit trail; it does not convey an access decision, which the initiating hub has already made locally.
+Here the eHealth hubs themselves — CoZo, RSW, BHN, Zodap — or major healthcare enterprises operate their own **OAuth 2.0 token issuers**. Trust between them is established bilaterally, or through a national hub federation trust registry. The token asserts the identity of the calling hub and carries the contextual claims needed for the responding hub's audit trail; it does not convey an access decision, which the initiating hub has already made locally.
 
 #### Mechanics & Workflow:
 1. The initiating client authenticates against its local Hub Authorization Server using the **OAuth 2.0 Client Credentials Flow** with asymmetric private key JWT authentication (`private_key_jwt`).
@@ -174,9 +174,9 @@ grant_type=client_credentials
 
 ### 2.3 Route 3: Derived System Based on STS (SAML 2.0 to OAuth 2.0 Bridge)
 
-Many Belgian hub source systems (hospital EHRs, laboratory information systems, pharmacy and practice software) and legacy connector middleware already integrate with the **eHealth Security Token Service (STS)** using SOAP WS-Trust and SAML 2.0 tokens (signed with physical eHealth X.509 keystores).
+A great many Belgian hub source systems — hospital EHRs, laboratory information systems, pharmacy and practice software — together with their connector middleware, already integrate with the **eHealth Security Token Service (STS)** over SOAP WS-Trust, presenting SAML 2.0 tokens signed with physical eHealth X.509 keystores. Rewriting that authentication stack is neither quick nor cheap.
 
-To enable these legacy systems to consume modern FHIR RESTful Interhub endpoints without an immediate, costly rewrite of their authentication stack, an **STS Token Exchange Gateway** is deployed:
+An **STS Token Exchange Gateway** lets those systems reach RESTful Interhub endpoints without the rewrite:
 
 ```mermaid
 sequenceDiagram
@@ -227,7 +227,7 @@ In the legacy KMEHR SOAP ecosystem, every outbound transaction was protected by 
 1. **Anti-Replay**: An eavesdropper or malicious actor could not capture an authorization token or query and re-execute it later.
 2. **Query Tamper-Proofing**: A compromised proxy or rogue intermediary could not modify the query parameters (e.g. altering the patient SSIN or manipulating clinical category filters in transit).
 
-In a RESTful HL7® FHIR® environment, bearer tokens alone (`Authorization: Bearer <token>`) are vulnerable to interception and can theoretically be reused with altered URL parameters or replayed until expiration. To achieve cryptographic equivalence with legacy SOAP SAML signatures, the Belgian Interhub specification evaluates two standardized HTTP-level tamper-proofing mechanisms:
+A bare bearer token (`Authorization: Bearer <token>`) offers neither property. Intercept one and it can be replayed until it expires, or reused against a different set of URL parameters entirely. Two standardized HTTP-level mechanisms restore what the SOAP signature provided, and the Belgian Interhub specification evaluates both:
 
 ```mermaid
 flowchart TD
@@ -259,7 +259,7 @@ flowchart TD
 
 ### 3.2 Option A: Demonstrating Proof-of-Possession (DPoP - RFC 9449)
 
-**DPoP (RFC 9449)** is the IETF and SMART on FHIR standard for sender-constraining OAuth 2.0 access tokens and binding individual REST calls to an asymmetric key-pair held by the client.
+**DPoP (RFC 9449)** is the IETF and SMART on FHIR approach to sender-constraining OAuth 2.0 access tokens: each REST call is bound to an asymmetric key pair that only the client holds.
 
 #### Mechanics & Workflow:
 1. The calling hub generates an asymmetric key-pair (RSA or ECDSA) and creates a signed **DPoP Proof JWT** for every outbound HTTP request.
@@ -305,7 +305,7 @@ DPoP: eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6IkVTMjU2IiwiandrIjp7Imt0eSI6IkVDIiwiY3J2Ij
 
 ### 3.3 Option B: HTTP Message Signatures (RFC 9421)
 
-If Belgian healthcare regulations or legal frameworks mandate an immutable audit trail signed directly with the healthcare institution's official **eHealth Enterprise Certificate (X.509)** rather than an ephemeral OAuth client key, **RFC 9421 (HTTP Message Signatures)** provides cryptographic signing of HTTP messages.
+Belgian regulation may yet require that the audit trail be signed with the institution's official **eHealth Enterprise Certificate (X.509)** rather than an ephemeral OAuth client key. **RFC 9421 (HTTP Message Signatures)** covers that case, signing the HTTP message itself.
 
 #### Mechanics & Workflow:
 1. The calling system signs the HTTP request components (`@method`, `@target-uri`, `authorization`, and optional `content-digest` for POST/PUT payloads) using its official Belgian eHealth private key.
@@ -325,7 +325,7 @@ Signature: sig1=:MEUCIQDxZ8Y7j...kL9A1wP==:
 
 ### 3.4 Alignment with the Three Proposed Authentication Routes
 
-The table below illustrates how Replay & Query Tamper-Proofing integrates into each of the 3 proposed authentication routes:
+How tamper-proofing attaches to each of the three proposed routes:
 
 | Security Dimension | Proposal 1: Hub-Issued JWTs (Direct Federation) | Proposal 2: eHealth Platform IAM (National AS, M2M) | Proposal 3: STS Token Exchange Bridge (RFC 8693) |
 | :--- | :--- | :--- | :--- |
@@ -333,7 +333,7 @@ The table below illustrates how Replay & Query Tamper-Proofing integrates into e
 | **Signing Key** | Hub private key (published via JWKS) | Client DPoP key or eHealth Enterprise Cert | Legacy X.509 Keystore / STS Gateway Key |
 | **Signed Elements** | `htm`, `htu` (Target URI), `jti`, `iat`, `nonce` | `htm`, `htu`, `jti`, `iat`, IAM Nonce | `@method`, `@target-uri`, SAML assertions |
 | **Freshness Window** | 30–60 seconds | 30–60 seconds | Enforced by STS token exchange TTL |
-| **SOAP Equivalence** | 100% equivalent to SAML XML-DSig | 100% equivalent to SAML XML-DSig | Translates SAML XML-DSig directly |
+| **SOAP Equivalence** | Equivalent to SAML XML-DSig | Equivalent to SAML XML-DSig | Translates SAML XML-DSig directly |
 
 ---
 
@@ -358,7 +358,7 @@ Consequently, a responding hub **MUST NOT** answer an Interhub query with an acc
 
 ## 5. Audit Trail & Traceability (from `getTransactionAccessList` to IHE BALP)
 
-Under Belgian law (Patient Rights Act & eHealth Platform Law), every access, search, and retrieval of medical records must be immutably recorded for auditability. In the legacy KMEHR world, the `getTransactionAccessList` SOAP service exposed access logs.
+Under the Patient Rights Act and the eHealth Platform Law, every access, search and retrieval of a medical record must be recorded immutably. The legacy KMEHR world discharged this through the `getTransactionAccessList` SOAP service, which exposed the access logs on request.
 
 Because the responding hub trusts the calling hub, the audit trail on both sides is what makes an Interhub exchange reconstructable after the fact: the initiating hub logs the access decision it made and the identity of the end user it made it for, and the responding hub logs which hub asked for what.
 

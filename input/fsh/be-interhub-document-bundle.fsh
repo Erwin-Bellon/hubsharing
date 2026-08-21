@@ -120,7 +120,7 @@ Description: "Root Composition resource for Belgian Telemonitoring / Remote Pati
 * status ^short = "Document status: preliminary | final | amended | entered-in-error"
 
 * type MS
-* type ^short = "Document type code (e.g. LOINC 10185-7 for Holter study or remote monitoring code)"
+* type ^short = "Document type code (e.g. LOINC 18754-2 for Holter study or remote monitoring code)"
 
 * category 0..1 MS
 * category = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring "Telemonitoring / Remote Patient Monitoring"

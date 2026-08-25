@@ -18,6 +18,7 @@ In the modernized FHIR-based Belgian Interhub standard, these legacy SOAP operat
 | :--- | :--- | :--- | :--- |
 | **`getTransactionList`** | **MHD ITI-67** (`Find DocumentReferences`) | `GET [base]/DocumentReference` (RESTful Search) | `Bundle` (type = `searchset`) containing `BeInterhubDocumentReference` entries |
 | **`getTransaction`** | **MHD ITI-68** (`Retrieve Document`) / `$document` | `GET [base]/Bundle/[id]` or `GET [base]/Composition/[id]/$document` | Complete `BeInterhubDocumentBundle` (type = `document`) |
+| **`getTransactionSet`** | **MHD ITI-68** with content negotiation | `GET [base]/Bundle/[id]` with `Accept: application/pdf`, or the `content[]` entry advertising `application/pdf` | The same document, either as a set of related transactions or as a hub-rendered PDF — see [§3.4](#34-transaction-sets-and-rendered-pdf-gettransactionset) |
 
 The resource returned by ITI-67 is specified field by field in [Envelope & Metadata](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference). The resource returned by ITI-68 is a `BeInterhubDocumentBundle`, whose per-domain content is specified in [Laboratory Reports](lab-report-sharing.html) and [Telemonitoring](mapping-telemonitoring-to-hub.html). The legacy SOAP operations in the left-hand column are crosswalked in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html).
 
@@ -74,14 +75,15 @@ The `Authorization: Bearer` token above is obtained through one of the three con
 | FHIR Search Parameter | Syntax & Modifier | KMEHR Concept | Description |
 | :--- | :--- | :--- | :--- |
 | **`patient.identifier`** *(Mandatory)* | `token` (`system\|value`) | `folder/patient/id[@S="INSS"]` | Patient's national Social Security Identification Number (SSIN). Systems must support both `https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin` and `urn:oid:1.3.6.1.4.1.21297.100.1.1`. |
-| **`category`** *(Optional)* | `token` (`system\|code`) | `transaction/cd[@S="CD-TRANSACTION"]` | Filters by Belgian document category (e.g. `sumehr`, `labresult`, `discharge`, `telemonitoring`). |
-| **`type`** *(Optional)* | `token` (`system\|code`) | `transaction/cd[@S="CD-CLINICAL"]` | Filters by clinical LOINC code (e.g. `http://loinc.org\|11502-2` for Lab Report, `http://loinc.org\|18754-2` for Holter Study). |
-| **`date`** *(Optional)* | `date` (`ge`, `le`, `gt`, `lt`) | `transaction/date` & `time` | Filters document creation timestamp within a date/time range. |
+| **`category`** *(Optional)* | `token` (`system\|code`) | `transaction/cd[@S="CD-TRANSACTION"]`, and any `transaction/cd[@S="LOCAL"]` | Filters by Belgian document category (e.g. `sumehr`, `labresult`, `discharge`, `telemonitoring`). A hub matches on **any** coding present in the `CodeableConcept`, national or local ([Envelope & Metadata §4.2](envelope-and-metadata.html#42-multiple-codings-national-and-local-codes-for-the-same-concept)). |
+| **`type`** *(Optional)* | `token` (`system\|code`) | *derived* — see note below | Filters by clinical LOINC code (e.g. `http://loinc.org\|11502-2` for Lab Report, `http://loinc.org\|18754-2` for Holter Study). A KMEHR hub transaction is not natively typed with LOINC; the responding hub derives the coding from `CD-TRANSACTION` and the local `cd`, so a hub that cannot derive one returns no match rather than a wrong one. |
+| **`date`** *(Optional)* | `date` (`ge`, `le`, `gt`, `lt`) | `transaction/date` + `transaction/time`, mapped onto `select/transaction/begindate` & `enddate` | Filters on the **document** date/time, not on when the hub indexed it. The legacy `select/transaction/begindate`/`enddate` filter is date-granular; a hub that can only filter by whole days MUST widen the range and filter the remainder itself rather than dropping matches. |
 | **`author.identifier`** *(Optional)* | `token` (`system\|value`) | `transaction/author/hcparty/id` | Filters by authoring physician NIHDI (`1.3.6.1.4.1.21297.100.9.1`) or institution NIHDI (`100.11.1`). |
-| **`status`** *(Optional)* | `token` (`current`, `superseded`) | Document execution status | Filter on metadata status. Defaults to `current`. |
+| **`status`** *(Optional)* | `token` (`current`, `superseded`) | presence in the hub index | Filter on metadata status. Defaults to `current`. |
 | **`_id`** / **`identifier`** *(Optional)* | `token` | `transaction/id` | Query for a specific document reference by ID. |
-| **`_count`** *(Optional)* | `integer` | `maxrows` | Maximum number of results requested per page. |
-| **`_sort`** *(Optional)* | `string` (`-date`, `date`) | Order of results | Defaults to descending by creation date (`-date`). |
+| **`_count`** *(Optional)* | `integer` | `maxrows` (audit-trail selects) | Maximum number of results requested per page. |
+| **`_sort`** *(Optional)* | `string` (`-date`, `date`) | Order of results | Defaults to descending by document date (`-date`). |
+| **`searchtype`** *(Optional, Belgian)* | `token` (`local` \| `federated`) | `select/searchtype` | Restricts the search to the responding hub's **own** index (`local`) instead of letting it fan out to its connected hub sources and partner hubs (`federated`, the default). The legacy hub services carry this as `select/searchtype = local`; without it, a consumer cannot ask a hub "what do *you* hold" and cross-hub queries duplicate work. Formal `SearchParameter` definition pending — see the project TODO. |
 
 The *KMEHR Concept* column above is a pointer, not the full crosswalk: the complete bi-directional field mapping is in [KMEHR to FHIR Mapping §2](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix), and the elements being searched are defined in [Envelope & Metadata §2](envelope-and-metadata.html#2-element-by-element-specification-beinterhubdocumentreference).
 
@@ -375,6 +377,8 @@ GET https://hub.cozo.be/fhir/Composition/comp-lab-example-01/$document HTTP/1.1
 Accept: application/fhir+json
 ```
 
+> **Retrieval is a single opaque URL, and that is a deliberate simplification.** In the legacy hub services, retrieving a document means re-sending a `select/transaction` element containing the local id, its `@SL` scheme *and* the full list of author `hcparty` elements copied from the list entry — a composite key the consumer has to carry around and reproduce exactly ([KMEHR to FHIR Mapping §2.1](mapping-kmehr-to-hub.html#21-what-actually-identifies-a-transaction-in-kmehr)). In the FHIR model the responding hub owns that mapping: it publishes one absolute `content.attachment.url`, and internally resolves it back to whatever key its own back end needs. Consumers MUST therefore treat the URL as opaque, and responding hubs MUST keep it stable and resolvable for as long as the document is discoverable.
+
 ### 3.3 Payload Structure: Strictly FHIR Bundles of Type `document`
 
 In the Belgian Interhub standard, **all retrieved transaction payloads are strictly Bundles of type `document` (`Bundle.type = #document`)**:
@@ -413,17 +417,102 @@ flowchart TD
 
 Why documents rather than FHIR messaging or granular resource access: [Design Rationale](resource-considerations.html#2-evaluation-of-candidate-carrier-paradigms). Complete worked payloads for both supported document types: [Laboratory Reports §5](lab-report-sharing.html#5-complete-json-document-walkthrough) and [Telemonitoring §5](mapping-telemonitoring-to-hub.html#5-complete-json-document-walkthrough).
 
+### 3.4 Transaction Sets and Rendered PDF (`getTransactionSet`)
+
+Two things the legacy hub services do at retrieval time have no place in the two transactions above, and both are still required.
+
+**Transaction sets.** Some Belgian document categories are not a single transaction but a *set* that only makes clinical sense together — the pharmaceutical medication scheme is the canonical case, where the current scheme and its history are retrieved as one unit. The legacy protocol exposes this as a separate `getTransactionSet` operation rather than as `getTransaction`, and a client picks the operation from the transaction's category.
+
+In FHIR this distinction disappears at the wire level: a set is still one `Bundle` of `type = document` whose `Composition` has one section per constituent transaction, retrieved through the same ITI-68 call. What the consumer needs is a way to know *which* it is getting, and that comes from `content.format` and `category` in the discovery entry — not from a second endpoint.
+
+**Hub-rendered PDF.** A responding hub can also return a **rendered PDF** of the same document instead of the structured payload; the legacy request signals this with `transaction/cd[@S="CD-HUBSERVICE"] = "pdf"`. This is not a fallback for hubs that cannot produce structured data — it is the hub's own authoritative rendering, which matters when what must be shown to a clinician is exactly what the source system printed.
+
+The FHIR equivalent is ordinary content negotiation on the retrieve, backed by a second `content[]` entry in the discovery result:
+
+```http
+GET https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01 HTTP/1.1
+Accept: application/pdf
+Authorization: Bearer <calling-hub-authentication-token>
+```
+
+```json
+"content": [
+  {
+    "attachment": {
+      "contentType": "application/fhir+json",
+      "url": "https://hub.cozo.be/fhir/Bundle/bundle-lab-report-example-01"
+    },
+    "format": {
+      "system": "https://www.ehealth.fgov.be/standards/fhir/interhub/CodeSystem/be-cs-interhub-format-codes",
+      "code": "urn:be:fgov:ehealth:lab:document:1.0"
+    }
+  },
+  {
+    "attachment": {
+      "contentType": "application/pdf",
+      "url": "https://hub.cozo.be/fhir/Binary/rendered-lab-report-example-01",
+      "title": "Lab Report - Peeters Jan (hub rendering)"
+    },
+    "format": {
+      "system": "https://www.ehealth.fgov.be/standards/fhir/interhub/CodeSystem/be-cs-interhub-format-codes",
+      "code": "urn:ihe:iti:xds:2017:pdf"
+    }
+  }
+]
+```
+
+Rules:
+* A hub that can render a document as PDF **SHOULD** advertise it as an additional `content[]` entry rather than as a separate operation, so that a consumer discovers the option in the same search result.
+* A consumer **MUST NOT** assume that a PDF rendering exists; `content[0]` remains the structured payload.
+* Both entries describe **the same document** and therefore share `identifier[uniqueId]`, `date`, `author` and `securityLabel`. A PDF rendering is not a separate document and MUST NOT be published as a second `DocumentReference`.
+
 ---
 
 ## 4. Error Codes & Exception Crosswalk
 
-| KMEHR SOAP Fault / Exception | HTTP Status | FHIR `OperationOutcome.issue.code` | Remediation / Clinical Context |
+### 4.1 How the legacy protocol reports failure
+
+KMEHR hub services do not signal application errors with SOAP faults. Every response carries an `acknowledge` element, and **that** is where success and failure live:
+
+```xml
+<acknowledge>
+    <iscomplete>false</iscomplete>
+    <error>
+        <cd S="CD-ERROR" SV="1.0">VZN.0.SYS.MH.X</cd>
+        <description>Metahub temporarily unavailable</description>
+    </error>
+</acknowledge>
+```
+
+* `acknowledge/iscomplete = false` means **the answer you are holding is not the whole answer** — not that the call failed. A hub that fanned out to five sources and heard back from three reports `iscomplete = false` and still returns the three sources' transactions.
+* `acknowledge/error[]` is a **repeating** list: one entry per thing that went wrong, each with a coded `cd` and a human-readable `description`.
+
+The FHIR mapping follows directly, and it is the same mechanism as [§2.4](#24-downstream-system-unavailability-partial-failures--operationoutcome-handling):
+
+| KMEHR `acknowledge` | HTTP Status | FHIR representation |
+| :--- | :--- | :--- |
+| `iscomplete = true`, no errors | `200 OK` | `Bundle` (searchset or document), no `OperationOutcome` entry. |
+| `iscomplete = false`, results present | `200 OK` | `Bundle` with the matches **plus** an `OperationOutcome` entry at `search.mode = "outcome"`, one `issue` per `acknowledge/error`. Never a 5xx. |
+| `iscomplete = false`, no results, query itself was valid | `200 OK` | Empty searchset **with** an `OperationOutcome` — never a bare empty bundle ([§2.4.1](#241-architectural-rules-for-partial-failures)). |
+| `iscomplete = false` on a retrieval (`getTransaction`) | `404` / `502` / `500` per the table below | A retrieval either produces the document or it fails; there is no partial document. |
+| `error/cd` | — | `OperationOutcome.issue.details.coding` — preserve the Belgian hub error code **verbatim**, with the national error code system as `system`. |
+| `error/description` | — | `OperationOutcome.issue.details.text` and/or `issue.diagnostics`. |
+
+Preserving `error/cd` verbatim matters: Belgian hub error codes are structured (`VZN.0.SYS.MH.X` names the subsystem that failed) and existing support processes are built on them. A gateway that collapses them into a generic FHIR issue code destroys the only diagnostic signal the service desk has.
+
+### 4.2 Condition to HTTP status crosswalk
+
+| Condition | HTTP Status | FHIR `OperationOutcome.issue.code` | Remediation / Clinical Context |
 | :--- | :--- | :--- | :--- |
-| **`Invalid patient identifier`** | `400 Bad Request` | `value` / `invalid` | The supplied SSIN is malformed or checksum failed. |
-| **`Unauthenticated / untrusted calling hub`** | `401 Unauthorized` / `403 Forbidden` | `security` | The calling hub could not be authenticated (invalid mTLS certificate, token signature, or tamper-proofing header). |
-| **`No transaction found with provided id`** | `404 Not Found` | `not-found` | The requested document uniqueId does not exist in the repository. |
-| **`Owner outside of network`** | `502 Bad Gateway` | `exception` | The target repository or home community is unreachable. |
-| **`Technical error`** | `500 Internal Error` | `transient` / `exception` | Internal repository failure. |
+| **Invalid or malformed patient identifier** | `400 Bad Request` | `value` / `invalid` | The supplied SSIN is malformed or its checksum failed. |
+| **Mandatory search parameter missing** | `400 Bad Request` | `required` | `patient.identifier` is mandatory on ITI-67. |
+| **Unauthenticated / untrusted calling hub** | `401 Unauthorized` / `403 Forbidden` | `security` | The calling hub could not be authenticated (invalid mTLS certificate, token signature, or tamper-proofing header). |
+| **Replay detected / stale proof** | `401 Unauthorized` | `security` | DPoP `jti` already seen, or `iat` outside the freshness window ([Security §3](security.html#3-replay-attack-prevention--query-tamper-proofing-dpop-rfc-9449--rfc-9421)). |
+| **No transaction found for the given identifier** | `404 Not Found` | `not-found` | The requested document `uniqueId` does not exist, or is no longer served by this hub. |
+| **Document exists but the retrieval key can no longer be resolved** | `410 Gone` | `not-found` | The hub knew this document but its source system has withdrawn it. Distinguishing `410` from `404` lets a consumer clear a stale bookmark instead of retrying. |
+| **Owner outside of network / home community unreachable** | `502 Bad Gateway` | `exception` | The target repository or home community is unreachable on **retrieval**. On *discovery* the same condition is a partial failure, not an error ([§2.4](#24-downstream-system-unavailability-partial-failures--operationoutcome-handling)). |
+| **Downstream timeout on retrieval** | `504 Gateway Timeout` | `timeout` | The hub source did not answer within the SLA. |
+| **Technical error** | `500 Internal Error` | `transient` / `exception` | Internal repository failure. |
 
 The `401` / `403` conditions above are raised by the authentication and tamper-proofing layer specified in [Security & Authentication](security.html#2-the-three-authentication--connection-routes-proposal); note in particular that a responding hub never refuses on access-control grounds such as "no therapeutic link" ([Security & Authentication §4](security.html#4-division-of-responsibility-between-initiating-and-responding-hub)). Partial downstream failures are *not* errors and are handled as described in [§2.4](#24-downstream-system-unavailability-partial-failures--operationoutcome-handling) above.
 

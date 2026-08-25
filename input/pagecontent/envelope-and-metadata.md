@@ -16,7 +16,7 @@ classDiagram
     class BeInterhubDocumentReference {
         +masterIdentifier: Identifier (RFC 3986 URI)
         +identifier[uniqueId]: Identifier (RFC 3986 URI)
-        +identifier[localId]: Identifier (Local Hub Source ID)
+        +identifier: local id + @SL scheme of the hub source
         +status: code (current | superseded)
         +docStatus: code (preliminary | final | amended)
         +category: CD-TRANSACTION coding + optional local codings
@@ -66,10 +66,9 @@ classDiagram
     }
 
     class AuthorList {
-        +author[0]: Regional Hub (Organization)
-        +author[1]: Originating Hub Source (Organization)
-        +author[2]: Authoring Physician (Practitioner)
-        +identifier: NIHDI / CBE / Hub OID (inline)
+        +author[]: unordered set of authoring parties
+        +extension[hcPartyType]: CD-HCPARTY (hub, orglaboratory, persphysician, application, ...)
+        +identifier: NIHDI / EHP number / CBE / SSIN (inline)
         +display: party name (inline)
     }
 
@@ -85,7 +84,7 @@ classDiagram
 
 This metadata envelope provides:
 1. **Clinical Context**: Document category (`CD-TRANSACTION`), precise clinical type (LOINC), clinical encounter period, and confidentiality level.
-2. **Author & Institutional Attribution**: Answering hub, originating hub source organisation, and authoring healthcare practitioner.
+2. **Author & Institutional Attribution**: every authoring party the legacy transaction named — answering hub, hub source organisation, department, practitioner, and end-user software — each typed inline with its `CD-HCPARTY` code.
 3. **Retrieval & Routing Endpoints**: The exact RESTful URL to fetch the full FHIR Document Bundle (`type = #document`), accompanied by the repository Home Community ID.
 4. **Technical Payload Characteristics**: MIME content type (`application/fhir+json`), document language, and format specification code.
 5. **Belgian Governance & Access Rules**: Granular patient portal access permissions, release dates, and end-to-end encryption metadata.
@@ -101,15 +100,15 @@ Every row below is normative for Belgian Interhub exchanges. The legacy KMEHR an
 | Element | Card. | Type | Description & Belgian Mapping Rule |
 | :--- | :--- | :--- | :--- |
 | **`masterIdentifier`** | `0..1` | `Identifier` | Globally unique master identifier for this version of the document, formatted as an RFC 3986 URI (e.g., `urn:oid:1.3.6.1.4.1.21297.100.2.1.815933567` or `urn:uuid:...`). |
-| **`identifier[uniqueId]`** | `1..1` | `Identifier` | Universal document entry identifier. Must use `system = "urn:ietf:rfc:3986"`. Directly maps to `XDSDocumentEntry.uniqueId` and KMEHR `transactionSummary/id`. |
-| **`identifier[localId]`** | `0..*` | `Identifier` | Local identifier assigned by the originating hub source system (hospital EHR, laboratory information system, practice software, …) (e.g. `LAB-2026-03-815933567`). |
+| **`identifier[uniqueId]`** | `1..1` | `Identifier` | Universal document entry identifier. Must use `system = "urn:ietf:rfc:3986"`. Maps to `XDSDocumentEntry.uniqueId`. A KMEHR transaction **cannot be assumed to carry** such an identifier: where the responding hub publishes no transaction-level unique id, it mints this URI idempotently from the composite KMEHR retrieval key *(hub EHP number, local id, `@SL` scheme)* and MUST return the same value for the same transaction on every query — see [KMEHR to FHIR Mapping §2.1](mapping-kmehr-to-hub.html#21-what-actually-identifies-a-transaction-in-kmehr). It is never the `id[@S="ID-KMEHR"]` of the SOAP `request` / `response` element, which identifies the message and changes on every call. |
+| **`identifier[localId]`** | `0..*` | `Identifier` | Local identifier assigned by the originating hub source system (hospital EHR, laboratory information system, practice software, …). This is the KMEHR `transaction/id[@S="LOCAL"]`: its element text becomes `identifier.value`, and its `@SL` attribute — the name of the hub source's local identifier *scheme* (`labo`, `RADPORTAL`, …) — becomes `identifier.system`, expressed as a URI derived from the publishing hub. Both parts are needed: the value alone is not unique across schemes. |
 | **`status`** | `1..1` | `code` | Metadata lifecycle status: `current` (approved and active), `superseded` (replaced by a newer version), or `entered-in-error`. |
 | **`docStatus`** | `0..1` | `code` | Clinical status of the underlying document: `preliminary`, `final`, `amended`. Mapped from KMEHR `iscomplete` / `isvalidated`. |
 | **`category[cdTransaction]`** | `1..1` | `CodeableConcept` | Document category. The Belgian `CD-TRANSACTION` coding (`https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction`, OID `1.3.6.1.4.1.21297.100.3.1`) is **mandatory** — examples: `sumehr`, `labresult`, `discharge`, `telemonitoring`, `note`, `referral`. **Additional codings of the same category from other code systems (local hub source catalogues, regional or LOINC/SNOMED CT equivalents) are explicitly allowed in the same `CodeableConcept`** — see [§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept). |
 | **`type`** | `1..1` | `CodeableConcept` | Precise clinical document type. At least one coding SHOULD be LOINC (e.g., `11502-2` for Laboratory Report, `18754-2` for Holter Study, `34133-9` for Summarization of Episode) for EHDS compatibility; Belgian national and local document-type codings MAY be carried alongside it in the same `CodeableConcept` ([§4.2](#42-multiple-codings-national-and-local-codes-for-the-same-concept)). |
 | **`subject`** | `1..1` | `Reference(BePatient)` | Reference to the patient, as the Belgian federal [`BePatient`](https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-patient) profile — **not** the plain HL7 `Patient`. The referenced Patient resource must contain the official Belgian Social Security Identification Number (**SSIN / INSS**), and `subject.identifier` SHOULD repeat that SSIN inline so that a search result is usable without resolving the reference ([§4.3](#43-logical-references-identifiers-instead-of-round-trips)). |
-| **`date`** | `1..1` | `instant` | Timestamp when the document metadata entry was created/indexed, standardized in **UTC (Z)** format (ISO 8601 `YYYY-MM-DDThh:mm:ssZ`). |
-| **`author`** | `1..*` | `Reference(BePractitioner \| BePractitionerRole \| BeOrganization \| Device \| BePatient \| RelatedPerson)` | Sequence of authors, targeting the Belgian federal profiles rather than the HL7 base resources. **The `1..*` cardinality diverges from `BeDocumentReference`, which caps `author` at `1..1` — see [§2.1](#21-relationship-to-bedocumentreference-hl7fhirbecore).** In Belgian Hub rules, author references follow a specific order of granularity: (1) Answering Hub, (2) Originating Hub Source Organisation, (3) Authoring Practitioner / Physician. **Every KMEHR `CD-HCPARTY` party type can be represented** — see the mapping in [§3.5](#35-healthcare-party-type-beexthcpartytype). Each author carries its `CD-HCPARTY` type inline in `author.extension[hcPartyType]`, its business identifier in `author.identifier`, and its name in `author.display`. |
+| **`date`** | `1..1` | `instant` | Date and time **of the document itself** — the KMEHR `transaction/date` and `transaction/time` elements concatenated — standardized to **UTC (Z)** (ISO 8601 `YYYY-MM-DDThh:mm:ssZ`); see the normalization rule in [§4.1](#41-timezone-normalization-to-utc-z). This is the value the `date` search parameter filters on and the default sort key. The moment the *hub source* persisted the record is a different value and belongs in `extension[recordDateTime]` ([§3.4](#34-source-system-recording-timestamp-beextrecorddatetime)); do not conflate the two. |
+| **`author`** | `1..*` | `Reference(BePractitioner \| BePractitionerRole \| BeOrganization \| Device \| BePatient \| RelatedPerson)` | The complete set of authoring parties, targeting the Belgian federal profiles rather than the HL7 base resources. **The `1..*` cardinality diverges from `BeDocumentReference`, which caps `author` at `1..1` — see [§2.1](#21-relationship-to-bedocumentreference-hl7fhirbecore).** One entry per KMEHR `transaction/author/hcparty`: typically the answering hub (`hub`), the hub source organisation (`orghospital`, `orglaboratory`, …), a department (`dept…`), the responsible practitioner (`pers…`) and, where applicable, the end-user software (`application`). **The order is not semantically significant** — a consumer identifies each party by `author.extension[hcPartyType]`, never by position — and **no entry may be dropped**, because in the legacy protocol the author list is part of the document's retrieval key ([KMEHR to FHIR Mapping §2.1](mapping-kmehr-to-hub.html#21-what-actually-identifies-a-transaction-in-kmehr)). **Every KMEHR `CD-HCPARTY` party type can be represented** — see [§3.5](#35-healthcare-party-type-beexthcpartytype). Each author carries its `CD-HCPARTY` type inline in `author.extension[hcPartyType]`, its business identifier in `author.identifier`, and its name in `author.display`. |
 | **`authenticator`** | `0..1` | `Reference(BePractitioner \| BePractitionerRole \| BeOrganization)` | Healthcare party that legally validated / attested the document (KMEHR `isvalidated`). Any `CD-HCPARTY` person, department or organisation type may appear here, typed inline through `authenticator.extension[hcPartyType]` and identified by `authenticator.identifier` (NIHDI / CBE) — [§3.5](#35-healthcare-party-type-beexthcpartytype). |
 | **`custodian`** | `0..1` | `Reference(BeOrganization)` | Organization accountable for the long-term maintenance and availability of the document record. This is a `CD-HCPARTY` **organisation** type — `orghospital`, `orglaboratory`, `orgpharmacy`, `orgpractice`, `orgpolyclinic`, `orgretirementhome`, … — a hospital being only one of them ([Architecture §1.2](architecture.html#12-what-counts-as-a-hub-source)). Typed inline through `custodian.extension[hcPartyType]`, identified by `custodian.identifier` (institution NIHDI or CBE). |
 | **`relatesTo`** | `0..*` | `BackboneElement` | Explicit relationships to previous documents (`replaces` for amended documents, `appends` for addenda, `transforms`). The related document is identified **by business identifier**: `relatesTo.target.identifier` (`system = "urn:ietf:rfc:3986"`) carries the `uniqueId` of the other document and is **mandatory**; a literal `relatesTo.target.reference` is optional and never required for resolution ([§4.3](#43-logical-references-identifiers-instead-of-round-trips)). |
@@ -160,8 +159,10 @@ FHIR profiling can only ever *narrow* a cardinality, never widen it. Deriving fr
 ### 3.1 Home Community ID (`BeExtHomeCommunityId`)
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-home-community-id` (or `urn:ihe:iti:xds:2023:homeCommunityId`)
 * **Cardinality**: `1..1` (Mandatory for Interhub exchanges)
-* **Value**: `uri` (e.g., `urn:oid:1.3.6.1.4.1.21297.1.3` for CoZo, `urn:oid:1.3.6.1.4.1.21297.1.1` for BHN)
-* **Purpose**: Identifies the regional hub responsible for managing the document. Essential for cross-community federation, allowing initiating gateways to route retrieve calls to the correct responding hub. The routing mechanics that consume this value are described in [Architecture §3.2](architecture.html#32-routing-mechanics-via-homecommunityid), and its role in the multi-hub model versus the single-NCP European model in [EHDS Alignment §3.1](ehds-alignment.html#3-belgian-advancements-beyond-baseline-ehds).
+* **Value**: `uri` (e.g., `urn:oid:1.3.6.1.4.1.21297.1.3` for CoZo, `urn:oid:1.3.6.1.4.1.21297.1.1` for BHN), **or** `Identifier` carrying the hub's **eHealth Platform (EHP) number**
+* **Purpose**: Identifies the regional hub responsible for managing the document.
+
+> **Alignment note — hubs are identified by their EHP number today.** In the live KMEHR ecosystem a hub is not addressed by an OID but by its **eHealth Platform number**, an 10-digit `1990……` identifier that appears as `hcparty/id[@S="ID-HCPARTY"]` next to `cd[@S="CD-HCPARTY"] = "hub"`, as the `hub/id` entries returned by the Metahub patient-link register, and as the `urn:be:fgov:ehealth:1.0:hub:ehp-number` attribute of the hub's STS token. Any `homeCommunityId` OID assigned by this IG is therefore an *additional* identifier that MUST be registered against the hub's EHP number, and a responding hub SHOULD be able to answer routing on either. When the `Identifier` form of this extension is used, `system` is the Belgian EHP NamingSystem and `value` is the `1990……` number. Ignoring the EHP number would break every existing hub routing table and the Metahub lookup that feeds it ([Architecture §3.1](architecture.html#31-belgian-national-identifiers)). Essential for cross-community federation, allowing initiating gateways to route retrieve calls to the correct responding hub. The routing mechanics that consume this value are described in [Architecture §3.2](architecture.html#32-routing-mechanics-via-homecommunityid), and its role in the multi-hub model versus the single-NCP European model in [EHDS Alignment §3.1](ehds-alignment.html#3-belgian-advancements-beyond-baseline-ehds).
 
 ### 3.2 Belgian Patient Access Metadata (`BeExtPatientAccess`)
 Belgian patients hold a legal right of access to their own medical records through certified national and regional portals such as MaSanté and MijnGezondheid. That right is not unconditional: a physician may delay or withhold a document under therapeutic exception, or until the findings have been discussed face to face.
@@ -177,8 +178,24 @@ This extension *carries* the rule; enforcing it is the initiating hub's responsi
   2. `accessDate` (`date`, `0..1`): Release date (inclusive) after which the document becomes visible on patient portals. Only valid when `access = yes`.
   3. `deniedReason` (`string`, `0..1`): Textual explanation why the document is withheld from the patient (applicable when `access = no` or `never`).
 
+#### Mapping from the KMEHR patient-access flags
+
+The legacy representation is coarser than this extension, and a gateway must not over-interpret it.
+
+| KMEHR | FHIR | Rule |
+| :--- | :--- | :--- |
+| `transaction/cd[@S="LOCAL" @SL="PatientAccess"]` with text `TRUE` or `YES` (case-insensitive) | `access = yes` | The KMEHR flag is a **boolean**, not a three-valued code. |
+| flag absent, empty, or any other text | `access = no` | Absence means "not released to the patient", never "unknown". |
+| *(no equivalent)* | `access = never` | `never` is a **forward-looking addition of this IG**. No Belgian hub emits it today, and a gateway MUST NOT synthesise it from a missing flag. |
+| `transaction/cd[@S="LOCAL" @SL="PatientAccessDate"]` | `accessDate` | **Threshold semantics**: the document becomes visible once the date has passed. An *empty* value means "visible now"; a value that cannot be parsed means "not visible". Three formats are in production use — `dd/MM/yyyy`, `dd-MM-yyyy` and `yyyy-MM-dd` — and all three MUST be accepted and normalized to a FHIR `date`. |
+| `transaction/cd[@S="LOCAL" @SL="PatientAccessDeniedReasonForPatient"]` | `deniedReason` | Defined in the KMEHR scheme but **not currently populated or consumed** by Belgian hub clients. |
+
+**Who filters.** The responding hub *publishes* the flag; it does not filter on it. When the end user behind a request is the patient, the initiating hub removes every entry whose effective access evaluates to "not visible" before showing the list — which is exactly the behaviour of the current KMEHR clients, and exactly the responsibility split of [Security & Authentication §1.1](security.html#11-trust-model-access-control-is-the-initiating-hubs-responsibility). Note that some hubs are patient-facing vaults whose entire content is by definition patient-accessible; such a hub may publish `access = yes` unconditionally.
+
 ### 3.3 End-to-End Encryption Metadata (`BeExtEndToEndEncryption`)
 This extension only *declares* that a payload is encrypted and for whom. Whether Belgium should encrypt FHIR payloads at all, which mechanism to use (JWE or CMS), and the tiered strategy this IG recommends are discussed in [End-to-End Encryption](end-to-end-encryption.html#5-recommended-strategic-solution-the-tiered-hybrid-architecture); the transport-level security that applies to every exchange regardless is specified in [Security & Authentication](security.html).
+
+> **Alignment note — in Interhub retrieval the *caller* nominates the recipient.** The KMEHR `GetTransaction` / `GetTransactionSet` request carries the encryption actor in its own `request/author/hcparty`: `id[@S="ID-ENCRYPTION-ACTOR"]`, `cd[@S="CD-ENCRYPTION-ACTOR"]` and optionally `id[@S="ID-ENCRYPTION-APPLICATION"]`. The responding hub then seals the folder for that actor at response time and returns it as `Base64EncryptedData/Base64EncryptedValue`. The extension below therefore describes what the *response* carries; the request-side counterpart is specified in [End-to-End Encryption §2.1](end-to-end-encryption.html#21-etee-in-interhub-retrieval-the-caller-nominates-the-recipient).
 
 For cross-enterprise transmissions requiring application-level encryption:
 * **URL**: `https://www.ehealth.fgov.be/standards/fhir/interhub/StructureDefinition/be-ext-end-to-end-encryption`

@@ -38,6 +38,34 @@ sequenceDiagram
 
 The KMEHR structures named in this flow (`<header>`, `<folder>`, `<transactionSummary>`) are mapped to their FHIR counterparts in [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html#2-master-metadata-mapping-matrix).
 
+### 2.1 ETEE in Interhub Retrieval: the Caller Nominates the Recipient
+
+The flow above is the *messaging* flow — a sender encrypts for a known recipient and hands the result to a broker. Interhub **retrieval** works the other way round, and the difference decides where the encryption metadata has to live.
+
+In a hub `getTransaction` / `getTransactionSet` call, the requester declares in its own request who the payload should be sealed for, inside `request/author/hcparty`:
+
+```xml
+<core:author>
+    <kmehr:hcparty>
+        <kmehr:id S="ID-HCPARTY" SV="1.0">1990000827</kmehr:id>
+        <kmehr:id S="ID-ENCRYPTION-ACTOR" SV="1.0">1990000827</kmehr:id>
+        <kmehr:cd S="CD-HCPARTY" SV="1.1">hub</kmehr:cd>
+        <kmehr:cd S="CD-ENCRYPTION-ACTOR" SV="1.0">EHP</kmehr:cd>
+        <!-- optional, when the ETK certificate is application-scoped -->
+        <kmehr:id S="ID-ENCRYPTION-APPLICATION" SV="1.0">my-application</kmehr:id>
+        <kmehr:name>UZ Leuven Hub</kmehr:name>
+    </kmehr:hcparty>
+</core:author>
+```
+
+The responding hub fetches that actor's ETK, seals the `<folder>` **at response time**, and returns it as `kmehrmessage/Base64EncryptedData/Base64EncryptedValue`, whose `@encoding` attribute names the character encoding of the plaintext inside.
+
+Three consequences for any FHIR design that keeps payload encryption:
+
+1. **Encryption is negotiated per retrieval, not fixed per document.** The same stored document is sealed differently for each caller. A design that treats "is this document encrypted, and for whom" as static metadata on the `DocumentReference` describes only the response, never the request.
+2. **The request needs somewhere to carry the actor.** ITI-68 as specified in [Transactions §3](transactions.html#3-transaction-2-gettransaction-mhd-iti-68-retrieve-document) is a plain `GET` with no such parameter. Whichever mechanism is chosen — a request header, a search parameter on the retrieve, or a claim in the access token — it must convey the actor **id**, its **type** (`EHP`, `NIHII`, `CBE`, `SSIN`, …) and optionally an **application id**, and it must be covered by the request signature of [Security & Authentication §3](security.html#3-replay-attack-prevention--query-tamper-proofing-dpop-rfc-9449--rfc-9421) — otherwise an intermediary could redirect the sealing to a key of its own choosing. **This IG does not yet specify it**; see the project TODO.
+3. **The requester is often an organisation, not a person.** In hub-to-hub traffic the ETK actor is typically the calling hub itself (actor type `EHP`), which means "end-to-end" here ends at the initiating hub, not at the clinician's workstation. That is worth being explicit about before calling the channel end-to-end encrypted, and it is one of the trade-offs weighed in [§4](#4-architectural-analysis-should-belgium-continue-e2ee-in-fhir).
+
 ---
 
 ## 3. How Would End-to-End Encryption Look in the FHIR World?

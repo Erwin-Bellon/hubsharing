@@ -2,7 +2,7 @@ Profile: BeInterhubDocumentReference
 Parent: DocumentReference
 Id: be-interhub-documentreference
 Title: "Belgian Interhub DocumentReference"
-Description: "Belgian metadata carrier profile for health document discovery (MHD ITI-67 / getTransactionList) and document retrieval (MHD ITI-68 / getTransaction) across federated eHealth Hubs. Replaces KMEHR TransactionSummaryType with a modern, EHDS-aligned FHIR metadata envelope. All party references target the national hl7.fhir.be.core profiles (BePatient, BePractitioner, BePractitionerRole, BeOrganization) rather than the HL7 base resources. It derives from the HL7 base DocumentReference rather than from BeDocumentReference for one reason only: BeDocumentReference caps author at 1..1, which cannot express the ordered Belgian Hub author chain — see the note on the author element."
+Description: "Belgian metadata carrier profile for health document discovery (MHD ITI-67 / getTransactionList) and document retrieval (MHD ITI-68 / getTransaction) across federated eHealth Hubs. Replaces KMEHR TransactionSummaryType with a modern, EHDS-aligned FHIR metadata envelope. All party references target the national hl7.fhir.be.core profiles (BePatient, BePractitioner, BePractitionerRole, BeOrganization) rather than the HL7 base resources. It derives from the HL7 base DocumentReference rather than from BeDocumentReference for one reason only: BeDocumentReference caps author at 1..1, which cannot express the full set of Belgian Hub authoring parties — see the note on the author element."
 
 * ^status = #active
 * ^version = "0.1.0"
@@ -69,11 +69,11 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
     uniqueId 1..1 MS and
     localId 0..* MS
 
-* identifier[uniqueId] ^short = "Universal document entry identifier (RFC 3986 URI format)"
+* identifier[uniqueId] ^short = "Universal document entry identifier (RFC 3986 URI). Minted idempotently by the responding hub where the legacy transaction carries no globally unique id; never the ID-KMEHR id of the SOAP request/response element"
 * identifier[uniqueId].system = "urn:ietf:rfc:3986" (exactly)
 * identifier[uniqueId].value 1..1 MS
 
-* identifier[localId] ^short = "Hub source internal identifier (hospital EHR, LIS, practice software, ...)"
+* identifier[localId] ^short = "Hub source internal identifier (KMEHR transaction/id[@S=LOCAL]): value from the element text, system from the @SL local scheme name of the publishing hub source"
 * identifier[localId].system 1..1 MS
 * identifier[localId].value 1..1 MS
 
@@ -127,13 +127,13 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 
 // Temporal Metadata
 * date 1..1 MS
-* date ^short = "When this document metadata entry was created/indexed (UTC instant)"
+* date ^short = "Date and time of the document itself (KMEHR transaction/date + transaction/time), normalized to a UTC instant. Not the moment the hub indexed it, and not the source system record timestamp (see extension[recordDateTime])"
 
 // Authors & Organizations
 * author 1..* MS
 * author only Reference($BePractitioner or $BePractitionerRole or $BeOrganization or Device or $BePatient or RelatedPerson)
-* author ^short = "Sequence of document authors. In Belgian Hub rules: first author represents the answering hub / originating hub source organisation, followed by the healthcare practitioner"
-* author ^definition = "Authors of the document. Any party type of the KMEHR CD-HCPARTY table can be represented: person types (persphysician, persnurse, persdentist, ...) as BePractitioner or BePractitionerRole, organisation types (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, ...) as BeOrganization, department and specialty types (dept...) as BeOrganization or BePractitionerRole, software or automated senders (application) as Device, the patient as BePatient, and other involved persons as RelatedPerson. The CD-HCPARTY code itself is carried inline by the hcPartyType extension so that consumers do not have to resolve the reference to learn what kind of party it is.\n\nCARDINALITY NOTE: the federal BeDocumentReference profile caps author at 1..1. This IG keeps author 1..* because KMEHR permits several hcparty authors per transaction and Belgian Hub rules require the answering hub, the originating hub source organisation and the authoring practitioner to be identifiable in one and the same entry. A relaxation of BeDocumentReference.author to 1..* has been requested against hl7.fhir.be.core; once it is published this profile will derive from BeDocumentReference directly."
+* author ^short = "All authoring parties of the document (answering hub, hub source organisation, department, practitioner, software). Unordered: identify each party by extension[hcPartyType], never by position"
+* author ^definition = "Authors of the document: one entry per KMEHR transaction/author/hcparty. Any party type of the KMEHR CD-HCPARTY table can be represented: person types (persphysician, persnurse, persdentist, ...) as BePractitioner or BePractitionerRole, organisation types (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, ...) as BeOrganization, department and specialty types (dept...) as BeOrganization or BePractitionerRole, the answering hub (hub) and software or automated senders (application) as BeOrganization or Device, the patient as BePatient, and other involved persons as RelatedPerson. The CD-HCPARTY code itself is carried inline by the hcPartyType extension so that consumers do not have to resolve the reference to learn what kind of party it is.\n\nORDER: the order of author entries carries NO meaning. A consumer identifies a party by author.extension[hcPartyType], never by position. In the legacy hub protocol the author list of a transaction is unordered and is part of the retrieval key of that transaction, so a gateway MUST preserve every non-empty hcparty and MUST NOT merge, reorder or drop entries.\n\nCARDINALITY NOTE: the federal BeDocumentReference profile caps author at 1..1. This IG keeps author 1..* because KMEHR permits several hcparty authors per transaction and Belgian Hub rules require the answering hub, the hub source organisation and the authoring practitioner to be identifiable in one and the same entry. A relaxation of BeDocumentReference.author to 1..* has been requested against hl7.fhir.be.core; once it is published this profile will derive from BeDocumentReference directly."
 * author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * author.extension[hcPartyType] ^short = "KMEHR CD-HCPARTY type of this author (persphysician, orghospital, orglaboratory, application, ...)"
 * author.identifier MS

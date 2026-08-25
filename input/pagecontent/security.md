@@ -134,7 +134,8 @@ In this route, authentication of the calling hub is centralized through the **Be
    * eHealth IAM resolves the enterprise certificate to the legal entity behind the calling hub — its **CBE / KBO** enterprise number, and where applicable the institution **NIHDI** number — against the federal authoritative sources (**CBE**, **CoBRHA**).
    * The subject of the resulting token is therefore an **organisation, not a person**.
 3. **Token Issuance**:
-   * eHealth IAM issues a short-lived signed OAuth 2.0 **access token** naming the calling hub (`sub` / `client_id`, CBE, hub Home Community OID), the audience, and the granted scopes. The token is sender-constrained with **DPoP** as described in §3.
+   * eHealth IAM issues a short-lived signed OAuth 2.0 **access token** naming the calling hub (`sub` / `client_id`, CBE, **eHealth Platform (EHP) number**, hub Home Community OID), the audience, and the granted scopes. The token is sender-constrained with **DPoP** as described in §3.
+   * **The token must carry the two facts the legacy security token already carried.** The eHealth STS assertion used by hub connectors today asserts the calling organisation's **EHP number** (`urn:be:fgov:ehealth:1.0:hub:ehp-number`, alongside `urn:be:fgov:ehealth:1.0:certificateholder:organization:ehp-number`) and a boolean stating that this organisation **is a recognised hub** (`urn:be:fgov:ehealth:1.0:certificateholder:organization:ehp-number:recognisedhub:boolean`). Both are load-bearing: the EHP number is how every hub routing table and the Metahub patient-link register name a hub, and the recognised-hub flag is the federation membership assertion that makes the trust model of §1.1 defensible. An access token that omits them is strictly weaker than the SAML assertion it replaces, and the responding hub would have to take federation membership on faith.
 4. **Consumption**:
    * The responding hub verifies the token against the official eHealth JWKS endpoint (`https://iam.ehealth.fgov.be/.well-known/jwks.json`), checks `aud`, `scope` and the DPoP binding, and logs the identity of the calling hub in its `AuditEvent`.
 
@@ -161,8 +162,10 @@ grant_type=client_credentials
   "be:organization": {
     "cbe": "0419052173",
     "nihdi": "71000012",
+    "ehp_number": "1990000827",
     "home_community_id": "urn:oid:1.3.6.1.4.1.21297.1.3"
   },
+  "be:recognised_hub": true,
   "iat": 1773050400,
   "exp": 1773051000
 }
@@ -216,6 +219,30 @@ grant_type=urn:ietf:params:oauth:grant-type:token-exchange
   "expires_in": 3600
 }
 ```
+
+---
+
+### 2.4 Carrying the End-User Chain (the KMEHR `request/author` equivalent)
+
+Authenticating the calling hub answers *which hub is asking*. It does not answer *on whose behalf* — and the legacy protocol has always answered both.
+
+Every KMEHR hub request carries a `request/author` element listing the parties behind the call as `hcparty` elements: the hub itself (`cd = hub`, identified by its EHP number), the practitioner (NIHDI + SSIN + name, `cd = persphysician` or another `pers…` type), the organisation, the patient when the patient is the one asking, and the end-user software (`cd = application`). This is not decoration: it is what the responding hub writes into its audit trail, and in the KMEHR world it is mandatory.
+
+The FHIR model must not lose it. This IG therefore requires that every Interhub request carry the same chain, as claims in the access token (Route 1 and Route 3) or as claims supplied by the initiating hub on its own responsibility (Route 2, where the token subject is the organisation):
+
+| KMEHR `request/author/hcparty` | Carried as | Requirement |
+| :--- | :--- | :--- |
+| `cd = hub`, `id[@S="ID-HCPARTY"]` = hub EHP number | `be:organization.ehp_number` / token `sub` | **SHALL** — established by hub authentication itself. |
+| `cd = pers…` (practitioner), `id[@S="ID-HCPARTY"]` (NIHDI), `id[@S="INSS"]`, name | `be:practitioner.{nihdi, ssin, name, role}` where `role` is the `CD-HCPARTY` code | **SHALL** when a human practitioner is behind the request. |
+| `cd = org…` (the practitioner's organisation) | `be:organization.{nihdi, cbe, name}` | **SHOULD**. |
+| `cd = patient` — the patient acting for themselves through a portal | `be:patient_context.ssin` **plus** an explicit indication that the requester *is* the patient | **SHALL** when the end user is the patient. The responding hub cannot otherwise distinguish a clinician looking at a patient's file from the patient looking at their own, and the two are audited differently. |
+| `cd = application` — end-user software, identified locally (`id[@S="LOCAL" @SL="endusersoftwareinfo"]`) | `be:software.{id, name, version}` | **SHOULD**. Identifies the product behind an automated call, which is what makes a misbehaving client traceable. |
+
+Two properties of the legacy model carry over unchanged, and one is new:
+
+* **The responding hub records, it does not verify.** These claims describe the end user; they are not an access decision, and the responding hub does not re-derive entitlement from them (§1.1).
+* **The party type travels with the party.** Each entry carries its `CD-HCPARTY` code, exactly as `hcparty/cd` does today and as [`extension[hcPartyType]`](envelope-and-metadata.html#35-healthcare-party-type-beexthcpartytype) does in the response.
+* **Unlike SOAP, the chain is now inside a signed token.** In KMEHR the author chain sat in the message body, signed as part of the envelope. In the RESTful model it belongs in the token or in a signed request component, never in an unauthenticated custom header — otherwise the audit trail records whatever the client felt like typing.
 
 ---
 
@@ -403,7 +430,11 @@ classDiagram
     AuditEvent --> EntityDocument : entity[1]
 ```
 
+The `agent` entries above are exactly the parties named in the request author chain of [§2.4](#24-carrying-the-end-user-chain-the-kmehr-requestauthor-equivalent) — that chain exists so that this `AuditEvent` can be written. Where the end user is the patient rather than a clinician, that fact must be visible in the audit record.
+
 These `AuditEvent` records are retained by the answering hubs for the legally mandated period (minimum 10 years in Belgium) and made accessible to patients via national transparency portals.
+
+> **The legacy audit-trail *query* has no FHIR counterpart in this IG yet.** KMEHR hubs and the Metahub expose the recorded accesses through `getPatientAuditTrail` — a filtered query over the audit log by patient, date range, accessing party and operation, returned to the patient or to the hub acting for them. Standardising `AuditEvent` writing without also standardising how those records are read back leaves the Patient Rights Act obligation only half discharged. The FHIR shape is not in doubt (a constrained `AuditEvent` search: `AuditEvent?patient=…&date=ge…&agent=…&_count=…`); what is missing is the profile, the search-parameter set and the statement of who may call it. Tracked in the project TODO.
 
 ---
 

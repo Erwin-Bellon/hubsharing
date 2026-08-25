@@ -8,9 +8,9 @@ Description: "Codes representing patient access rights and visibility to health 
 * ^status = #active
 * ^experimental = false
 * ^caseSensitive = true
-* #yes "Accessible to Patient" "The document is accessible to the patient (subject to optional release date / delay)."
-* #no "Temporarily Withheld" "The document is not currently accessible to the patient. May be released later by the treating physician."
-* #never "Permanently Restricted" "The document is permanently not accessible to the patient (sealed / therapeutic exception)."
+* #yes "Accessible to Patient" "The document is accessible to the patient, subject to the optional release date in accessDate. Maps from a KMEHR cd[@S=LOCAL @SL=PatientAccess] whose text is TRUE or YES (compared case-insensitively)."
+* #no "Temporarily Withheld" "The document is not currently accessible to the patient. May be released later by the treating physician. This is the value a gateway uses when the KMEHR PatientAccess flag is absent, empty, or holds any value other than TRUE/YES: absence means not released, never unknown."
+* #never "Permanently Restricted" "The document is permanently not accessible to the patient (sealed / therapeutic exception). This code has no equivalent in the current KMEHR patient-access flag, which is boolean; a gateway MUST NOT synthesise it from a missing flag and may only emit it where a source system states permanent restriction explicitly."
 
 ValueSet: BeVSPatientAccess
 Id: be-vs-patient-access

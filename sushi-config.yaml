@@ -30,6 +30,10 @@ dependencies:
     id: beCore
     uri: https://www.ehealth.fgov.be/standards/fhir/core/ImplementationGuide/hl7.fhir.be.core
     version: 2.1.2
+  hl7.fhir.be.core-clinical:
+    id: beCoreClinical
+    uri: https://www.ehealth.fgov.be/standards/fhir/core-clinical/ImplementationGuide/hl7.fhir.be.core-clinical
+    version: 1.1.0
   hl7.fhir.be.patient-monitoring:
     id: bePatientMonitoring
     uri: http://hl7belgium.org/fhir/patient-monitoring/ImplementationGuide/hl7.fhir.be.patient-monitoring

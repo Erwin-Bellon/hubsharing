@@ -53,20 +53,20 @@ Description: "Root Composition resource for Belgian Laboratory Report Document B
 * type ^short = "Document type code (fixed to LOINC 11502-2 for Lab Reports)"
 
 * category 0..1 MS
-* category = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#labresult "Laboratory Result"
+* category = $BE-CS-CD-TRANSACTION#labresult "Laboratory Result"
 * category ^short = "Belgian document category (fixed to labresult for Lab Reports)"
 
 * subject 1..1 MS
-* subject only Reference(Patient)
+* subject only Reference($BePatient)
 * subject ^short = "Patient who is the subject of the lab report"
 
 * date 1..1 MS
 * date ^short = "Document composition date/time"
 
 * author 1..* MS
-* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient or RelatedPerson)
+* author only Reference($BePractitioner or $BePractitionerRole or $BeOrganization or Device or $BePatient or RelatedPerson)
 * author ^short = "Authoring laboratory, laboratory physician, device or other CD-HCPARTY party"
-* author ^definition = "Author(s) of the laboratory document. Any KMEHR CD-HCPARTY party type may appear: person types as Practitioner / PractitionerRole, organisation and department types as Organization, software as Device. The CD-HCPARTY code is carried inline by the hcPartyType extension."
+* author ^definition = "Author(s) of the laboratory document. Any KMEHR CD-HCPARTY party type may appear: person types as BePractitioner / BePractitionerRole, organisation and department types as BeOrganization, software as Device. The CD-HCPARTY code is carried inline by the hcPartyType extension."
 * author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * author.identifier MS
 * author.display MS
@@ -81,12 +81,13 @@ Description: "Root Composition resource for Belgian Laboratory Report Document B
 * attester.mode MS
 * attester.time MS
 * attester.party MS
+* attester.party only Reference($BePatient or RelatedPerson or $BePractitioner or $BePractitionerRole or $BeOrganization)
 * attester.party.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * attester.party.identifier MS
 * attester.party.display MS
 
 * custodian 0..1 MS
-* custodian only Reference(Organization)
+* custodian only Reference($BeOrganization)
 * custodian ^short = "Custodian hub source organization (laboratory, hospital, pharmacy, care home, ...)"
 * custodian.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * custodian.identifier MS
@@ -99,7 +100,7 @@ Description: "Root Composition resource for Belgian Laboratory Report Document B
 * section.text 1..1 MS
 * section.text ^short = "Human-readable narrative summary for the section"
 * section.entry 0..* MS
-* section.entry only Reference(DiagnosticReport or Observation or Specimen or DocumentReference)
+* section.entry only Reference(DiagnosticReport or $BeObservation or Specimen or $BeDocumentReference)
 
 // -------------------------------------------------------------------------
 // Belgian Interhub Telemonitoring Composition Profile
@@ -123,18 +124,18 @@ Description: "Root Composition resource for Belgian Telemonitoring / Remote Pati
 * type ^short = "Document type code (e.g. LOINC 18754-2 for Holter study or remote monitoring code)"
 
 * category 0..1 MS
-* category = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring "Telemonitoring / Remote Patient Monitoring"
+* category = $BE-CS-CD-TRANSACTION#telemonitoring "Telemonitoring / Remote Patient Monitoring"
 * category ^short = "Belgian document category (fixed to telemonitoring for Telemonitoring documents)"
 
 * subject 1..1 MS
-* subject only Reference(Patient)
+* subject only Reference($BePatient)
 * subject ^short = "Patient who is monitored"
 
 * date 1..1 MS
 * date ^short = "Document composition date/time"
 
 * author 1..* MS
-* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient or RelatedPerson)
+* author only Reference($BePractitioner or $BePractitionerRole or $BeOrganization or Device or $BePatient or RelatedPerson)
 * author ^short = "Authoring prescriber, monitoring service, remote monitoring platform or other CD-HCPARTY party"
 * author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * author.identifier MS
@@ -144,7 +145,7 @@ Description: "Root Composition resource for Belgian Telemonitoring / Remote Pati
 * title ^short = "Human-readable title of the telemonitoring report (e.g. '24-Hour Continuous Holter Monitoring Report')"
 
 * custodian 0..1 MS
-* custodian only Reference(Organization)
+* custodian only Reference($BeOrganization)
 * custodian.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * custodian.identifier MS
 * custodian.display MS
@@ -156,4 +157,4 @@ Description: "Root Composition resource for Belgian Telemonitoring / Remote Pati
 * section.text 1..1 MS
 * section.text ^short = "Human-readable narrative summary for the telemonitoring section"
 * section.entry 0..* MS
-* section.entry only Reference(DiagnosticReport or Observation or CarePlan or Device or QuestionnaireResponse)
+* section.entry only Reference(DiagnosticReport or $BeObservation or CarePlan or Device or QuestionnaireResponse)

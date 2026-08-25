@@ -2,10 +2,48 @@ Profile: BeInterhubDocumentReference
 Parent: DocumentReference
 Id: be-interhub-documentreference
 Title: "Belgian Interhub DocumentReference"
-Description: "Belgian metadata carrier profile for health document discovery (MHD ITI-67 / getTransactionList) and document retrieval (MHD ITI-68 / getTransaction) across federated eHealth Hubs. Replaces KMEHR TransactionSummaryType with a modern, EHDS-aligned FHIR metadata envelope."
+Description: "Belgian metadata carrier profile for health document discovery (MHD ITI-67 / getTransactionList) and document retrieval (MHD ITI-68 / getTransaction) across federated eHealth Hubs. Replaces KMEHR TransactionSummaryType with a modern, EHDS-aligned FHIR metadata envelope. All party references target the national hl7.fhir.be.core profiles (BePatient, BePractitioner, BePractitionerRole, BeOrganization) rather than the HL7 base resources. It derives from the HL7 base DocumentReference rather than from BeDocumentReference for one reason only: BeDocumentReference caps author at 1..1, which cannot express the ordered Belgian Hub author chain — see the note on the author element."
 
 * ^status = #active
 * ^version = "0.1.0"
+
+// -------------------------------------------------------------------------
+// RELATIONSHIP TO BeDocumentReference (hl7.fhir.be.core)
+//
+// This profile mirrors every constraint of the Belgian federal
+// BeDocumentReference profile
+// (https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-documentreference):
+//
+//   subject                        1..1, Reference(BePatient)
+//   author                         Reference(BeOrganization | BePractitioner |
+//                                  BePractitionerRole | BePatient | Device |
+//                                  RelatedPerson)
+//   content.attachment.contentType 1..1
+//   category, content, content.attachment.data, content.attachment.url,
+//   context.related                mustSupport
+//
+// ... with ONE deliberate divergence, which is why Parent is the base
+// DocumentReference and not BeDocumentReference:
+//
+//   *** CHANGE REQUEST TO hl7.fhir.be.core ***
+//   BeDocumentReference constrains DocumentReference.author to 1..1.
+//   KMEHR has always allowed a transaction to carry SEVERAL <hcparty>
+//   author elements (the answering hub, the originating hub source
+//   organisation and the authoring physician are three distinct parties,
+//   and KMEHR expresses all three), and the HL7 base resource allows
+//   author 0..*. The 1..1 cap in be.core is therefore a regression against
+//   both KMEHR and the base specification, and it makes federated document
+//   sharing impossible to express: there is no way to state both WHICH HUB
+//   answered and WHICH CLINICIAN wrote the document in a single entry.
+//
+//   BeDocumentReference SHOULD be relaxed to author 1..* so that this
+//   profile can derive from it directly. Until that change lands in
+//   hl7.fhir.be.core, this IG profiles the base resource and re-applies the
+//   be.core constraints by hand. Nothing else here conflicts with
+//   BeDocumentReference, so an instance valid against this profile is also
+//   valid against BeDocumentReference whenever it happens to carry a single
+//   author.
+// -------------------------------------------------------------------------
 
 // Extensions
 * extension contains
@@ -82,7 +120,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 
 // Patient Subject (INSS / SSIN)
 * subject 1..1 MS
-* subject only Reference(Patient)
+* subject only Reference($BePatient)
 * subject ^short = "Patient who is the subject of the document (must carry national SSIN/INSS identifier)"
 * subject.identifier MS
 * subject.identifier ^short = "Patient SSIN / INSS carried inline, so a consumer does not need to resolve the Patient reference to identify the subject"
@@ -93,9 +131,9 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 
 // Authors & Organizations
 * author 1..* MS
-* author only Reference(Practitioner or PractitionerRole or Organization or Device or Patient or RelatedPerson)
+* author only Reference($BePractitioner or $BePractitionerRole or $BeOrganization or Device or $BePatient or RelatedPerson)
 * author ^short = "Sequence of document authors. In Belgian Hub rules: first author represents the answering hub / originating hub source organisation, followed by the healthcare practitioner"
-* author ^definition = "Authors of the document. Any party type of the KMEHR CD-HCPARTY table can be represented: person types (persphysician, persnurse, persdentist, ...) as Practitioner or PractitionerRole, organisation types (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, ...) as Organization, department and specialty types (dept...) as Organization or PractitionerRole, software or automated senders (application) as Device, the patient as Patient, and other involved persons as RelatedPerson. The CD-HCPARTY code itself is carried inline by the hcPartyType extension so that consumers do not have to resolve the reference to learn what kind of party it is."
+* author ^definition = "Authors of the document. Any party type of the KMEHR CD-HCPARTY table can be represented: person types (persphysician, persnurse, persdentist, ...) as BePractitioner or BePractitionerRole, organisation types (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, ...) as BeOrganization, department and specialty types (dept...) as BeOrganization or BePractitionerRole, software or automated senders (application) as Device, the patient as BePatient, and other involved persons as RelatedPerson. The CD-HCPARTY code itself is carried inline by the hcPartyType extension so that consumers do not have to resolve the reference to learn what kind of party it is.\n\nCARDINALITY NOTE: the federal BeDocumentReference profile caps author at 1..1. This IG keeps author 1..* because KMEHR permits several hcparty authors per transaction and Belgian Hub rules require the answering hub, the originating hub source organisation and the authoring practitioner to be identifiable in one and the same entry. A relaxation of BeDocumentReference.author to 1..* has been requested against hl7.fhir.be.core; once it is published this profile will derive from BeDocumentReference directly."
 * author.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * author.extension[hcPartyType] ^short = "KMEHR CD-HCPARTY type of this author (persphysician, orghospital, orglaboratory, application, ...)"
 * author.identifier MS
@@ -104,9 +142,9 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * author.display ^short = "Human-readable name of the author, so a search result can be rendered without resolving the reference"
 
 * authenticator 0..1 MS
-* authenticator only Reference(Practitioner or PractitionerRole or Organization)
+* authenticator only Reference($BePractitioner or $BePractitionerRole or $BeOrganization)
 * authenticator ^short = "Party that legally validated / attested the document content (KMEHR isvalidated)"
-* authenticator ^definition = "The healthcare party that legally validated the document. As for author, this may be any CD-HCPARTY party: a person type as Practitioner or PractitionerRole, or an organisation / department type as Organization. Its CD-HCPARTY code is carried inline by the hcPartyType extension."
+* authenticator ^definition = "The healthcare party that legally validated the document. As for author, this may be any CD-HCPARTY party: a person type as BePractitioner or BePractitionerRole, or an organisation / department type as BeOrganization. Its CD-HCPARTY code is carried inline by the hcPartyType extension."
 * authenticator.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
 * authenticator.extension[hcPartyType] ^short = "KMEHR CD-HCPARTY type of the validating party"
 * authenticator.identifier MS
@@ -114,7 +152,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * authenticator.display MS
 
 * custodian 0..1 MS
-* custodian only Reference(Organization)
+* custodian only Reference($BeOrganization)
 * custodian ^short = "Custodian organization responsible for long-term document maintenance (the hub source organisation or its repository)"
 * custodian ^definition = "Organization accountable for the long-term maintenance and availability of the document. This is a CD-HCPARTY organisation type (orghospital, orglaboratory, orgpharmacy, orgpractice, orgretirementhome, orgpolyclinic, ...) — a hospital is only one of the possible custodians. Its CD-HCPARTY code is carried inline by the hcPartyType extension, and its CBE / NIHDI number by custodian.identifier."
 * custodian.extension contains BeExtHcPartyType named hcPartyType 0..1 MS
@@ -157,6 +195,12 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * content.attachment.title 0..1 MS
 * content.attachment.title ^short = "Document title"
 
+// Mirrors BeDocumentReference: content.attachment.data is mustSupport there.
+// Interhub always retrieves the payload out of band via content.attachment.url
+// (ITI-68), so inline base64 data stays optional here.
+* content.attachment.data 0..1 MS
+* content.attachment.data ^short = "Inline base64 payload. NOT used by Interhub metadata discovery - a getTransactionList entry carries the retrieval URL, never the document body"
+
 * content.format 0..1 MS
 * content.format ^short = "Format code for the document (e.g. urn:be:fgov:ehealth:lab:document:1.0)"
 * content.format from BeVSInterhubFormatCodes (extensible)
@@ -169,3 +213,7 @@ Description: "Belgian metadata carrier profile for health document discovery (MH
 * context.facilityType ^short = "Healthcare facility classification"
 * context.practiceSetting 0..1 MS
 * context.practiceSetting ^short = "Clinical specialty or practice setting"
+
+// Mirrors BeDocumentReference: context.related is mustSupport there.
+* context.related 0..* MS
+* context.related ^short = "Other resources (encounter, episode of care, order, ...) that place this document in its clinical context"

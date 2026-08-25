@@ -88,8 +88,8 @@ flowchart TB
 | `telemonitoringId` | `DiagnosticReport.extension[telemonitoringId]` | `Extension(Identifier)` |
 | `carepath.id` & `version` | `DiagnosticReport.extension[carepath]` | Complex `Extension(carepathId, version)` |
 | `prescriberApplication` | `DiagnosticReport.extension[prescriberApplication]` | `Extension(string)` |
-| `prescriber` (NIHDI) | `Composition.author` & `DiagnosticReport.performer` | `Reference(Practitioner)` (with NIHDI system) |
-| `patientId` (SSIN) | `Composition.subject` & `DiagnosticReport.subject` | `Reference(Patient)` (with SSIN system) |
+| `prescriber` (NIHDI) | `Composition.author` & `DiagnosticReport.performer` | `Reference(BePractitioner)` (be.core NIHDI identifier slice) |
+| `patientId` (SSIN) | `Composition.subject` & `DiagnosticReport.subject` | `Reference(BePatient)` (be.core SSIN identifier slice) |
 | `service` / clinical code | `Composition.type` & `DiagnosticReport.code` | `CodeableConcept` (LOINC / SNOMED) |
 | `attachments[].uri` | `DiagnosticReport.presentedForm[].url` | `Attachment.url` |
 | `attachments[].contentType`| `DiagnosticReport.presentedForm[].contentType` | `Attachment.contentType` (`application/pdf`) |

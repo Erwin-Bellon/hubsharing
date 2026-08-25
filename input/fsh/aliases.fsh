@@ -37,3 +37,33 @@ Alias: $BE-OID-REPOSITORY-ROOT = urn:oid:1.3.6.1.4.1.21297.100.2
 // IHE MHD & XDS Aliases
 // -------------------------------------------------------------------------
 Alias: $IHE-HOME-COMMUNITY = urn:ihe:iti:xds:2023:homeCommunityId
+
+// -------------------------------------------------------------------------
+// Belgian Federal Core Profiles (hl7.fhir.be.core)
+//
+// These are the national profiles this IG builds on. Every reference to a
+// person, practitioner or organisation in this specification targets one of
+// these profiles rather than the plain HL7 base resource, so that a Belgian
+// consumer is guaranteed the national identifier slices (SSIN, NIHDI, CBE,
+// EHP), the BeAddress line decomposition and the CD-HCPARTY typing.
+// -------------------------------------------------------------------------
+Alias: $BePatient = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-patient
+Alias: $BePractitioner = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-practitioner
+Alias: $BePractitionerRole = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-practitionerrole
+Alias: $BeOrganization = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-organization
+Alias: $BeDocumentReference = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-documentreference
+Alias: $BeProvenance = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-provenance
+Alias: $BeCommunication = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-communication
+Alias: $BeAddress = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-address
+Alias: $BeCodedAnnotation = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-coded-annotation
+
+// Belgian Federal Core Clinical Profiles (hl7.fhir.be.core-clinical)
+Alias: $BeObservation = https://www.ehealth.fgov.be/standards/fhir/core-clinical/StructureDefinition/be-observation
+Alias: $BeClinicalObservation = https://www.ehealth.fgov.be/standards/fhir/core-clinical/StructureDefinition/be-clinical-observation
+
+// Belgian Federal Core Extensions
+Alias: $BeExtGenderAtBirth = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-ext-gender-at-birth
+Alias: $BeExtRecorder = https://www.ehealth.fgov.be/standards/fhir/core/StructureDefinition/be-ext-recorder
+
+// Additional Belgian NamingSystems used by the be.core identifier slices
+Alias: $BE-NS-EHP = https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ehp

@@ -3,67 +3,81 @@
 // =========================================================================
 
 Instance: PatientPeeters
-InstanceOf: Patient
+InstanceOf: BePatient
 Title: "Patient Jan Peeters (Belgian INSS/SSIN)"
-Description: "Example Belgian patient identified by official National Register SSIN/INSS."
+Description: "Example Belgian patient identified by official National Register SSIN/INSS, conforming to the federal BePatient profile."
 Usage: #example
-* identifier[0].system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"
-* identifier[0].value = "79080412345"
-* identifier[1].system = "urn:oid:1.3.6.1.4.1.21297.100.1.1"
-* identifier[1].value = "79080412345"
+// identifier[SSIN] is the be.core slice: system is fixed to the national SSIN NamingSystem.
+* identifier[SSIN].system = $BE-NS-SSIN
+* identifier[SSIN].value = "79080412345"
+// The OID form of the same SSIN, kept alongside for legacy KMEHR consumers.
+* identifier[+].system = $BE-OID-SSIN
+* identifier[=].value = "79080412345"
 * name[0].family = "Peeters"
 * name[0].given[0] = "Jan"
 * gender = #male
 * birthDate = "1979-08-04"
-* address[0].line[0] = "Kerkstraat 12"
+// BeAddress decomposes the street name, house number and postal box into
+// separate address.line entries - always RECOMMENDED over a single free-text line.
+* address[0].line[0] = "Kerkstraat"
+* address[0].line[0].extension[Streetname].valueString = "Kerkstraat"
+* address[0].line[1] = "12"
+* address[0].line[1].extension[Housenumber].valueString = "12"
 * address[0].city = "Leuven"
 * address[0].postalCode = "3000"
 * address[0].country = "BEL"
 
 Instance: DrJeanDepondt
-InstanceOf: Practitioner
+InstanceOf: BePractitioner
 Title: "Dr. Jean Depondt (Cardiologist)"
-Description: "Example Belgian medical specialist identified by NIHDI / RIZIV."
+Description: "Example Belgian medical specialist identified by NIHDI / RIZIV, conforming to the federal BePractitioner profile."
 Usage: #example
-* identifier[0].system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
-* identifier[0].value = "19876543201"
-* identifier[1].system = "urn:oid:1.3.6.1.4.1.21297.100.9.1"
-* identifier[1].value = "19876543201"
+* identifier[NIHDI].system = $BE-NS-NIHDI
+* identifier[NIHDI].value = "19876543201"
+* identifier[+].system = $BE-OID-NIHDI-PRACTITIONER
+* identifier[=].value = "19876543201"
 * name[0].family = "Depondt"
 * name[0].given[0] = "Jean"
 
 Instance: DrDanieleGovaerts
-InstanceOf: Practitioner
+InstanceOf: BePractitioner
 Title: "Dr. Danièle Govaerts (Clinical Biologist)"
-Description: "Example Belgian clinical laboratory physician identified by NIHDI / RIZIV."
+Description: "Example Belgian clinical laboratory physician identified by NIHDI / RIZIV, conforming to the federal BePractitioner profile."
 Usage: #example
-* identifier[0].system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
-* identifier[0].value = "10000007999"
-* identifier[1].system = "urn:oid:1.3.6.1.4.1.21297.100.9.1"
-* identifier[1].value = "10000007999"
+* identifier[NIHDI].system = $BE-NS-NIHDI
+* identifier[NIHDI].value = "10000007999"
+* identifier[+].system = $BE-OID-NIHDI-PRACTITIONER
+* identifier[=].value = "10000007999"
 * name[0].family = "Govaerts"
 * name[0].given[0] = "Danièle"
 
 Instance: OrgUZLeuven
-InstanceOf: Organization
+InstanceOf: BeOrganization
 Title: "UZ Leuven"
-Description: "Example Belgian University Hospital identified by NIHDI and Enterprise CBE numbers."
+Description: "Example Belgian University Hospital identified by NIHDI and Enterprise CBE numbers, conforming to the federal BeOrganization profile."
 Usage: #example
-* identifier[0].system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
-* identifier[0].value = "71000012"
-* identifier[1].system = "urn:oid:1.3.6.1.4.1.21297.100.11.1"
-* identifier[1].value = "71000012"
-* identifier[2].system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/cbe"
-* identifier[2].value = "0419052173"
+* identifier[NIHDI].system = $BE-NS-NIHDI
+* identifier[NIHDI].value = "71000012"
+* identifier[CBE].system = $BE-NS-CBE
+* identifier[CBE].value = "0419052173"
+* identifier[+].system = $BE-OID-NIHDI-HOSPITAL
+* identifier[=].value = "71000012"
+// BeOrganization.type[CD-HCPARTY] carries the KMEHR party type on the resource
+// itself; the envelope repeats it inline via BeExtHcPartyType so that a consumer
+// need not resolve this reference to know it is dealing with a hospital.
+* type[CD-HCPARTY] = $BE-CS-CD-HCPARTY#orghospital "hospital"
 * name = "UZ Leuven"
 
 Instance: HubCoZo
-InstanceOf: Organization
+InstanceOf: BeOrganization
 Title: "CoZo Regional Hub"
-Description: "Example regional Belgian eHealth Hub (Home Community ID)."
+Description: "Example regional Belgian eHealth Hub (Home Community ID), conforming to the federal BeOrganization profile."
 Usage: #example
-* identifier[0].system = "urn:ietf:rfc:3986"
-* identifier[0].value = "urn:oid:1.3.6.1.4.1.21297.1.3"
+// A hub is identified by its Home Community OID rather than by NIHDI or CBE;
+// BeOrganization.identifier slicing is open, so this sits outside the named slices.
+* identifier[+].system = "urn:ietf:rfc:3986"
+* identifier[=].value = "urn:oid:1.3.6.1.4.1.21297.1.3"
+* type[CD-HCPARTY] = $BE-CS-CD-HCPARTY#application "software application"
 * name = "CoZo (Collaboratief Zorgplatform)"
 
 // =========================================================================
@@ -87,14 +101,14 @@ Usage: #example
 * identifier[localId].value = "LAB-2026-03-815933567"
 * status = #current
 * docStatus = #final
-* category[cdTransaction].coding[cdTransactionCode] = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#labresult "Laboratory Result"
+* category[cdTransaction].coding[cdTransactionCode] = $BE-CS-CD-TRANSACTION#labresult "Laboratory Result"
 // The same category, additionally expressed in the hub source's own catalogue.
 * category[cdTransaction].coding[+].system = "https://uzleuven.be/fhir/CodeSystem/document-category"
 * category[cdTransaction].coding[=].code = #KLINBIO
 * category[cdTransaction].coding[=].display = "Klinische biologie - verslag"
 * type.coding[0] = $LNC#11502-2 "Laboratory report"
 * subject = Reference(PatientPeeters)
-* subject.identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"
+* subject.identifier.system = $BE-NS-SSIN
 * subject.identifier.value = "79080412345"
 * date = "2026-03-15T10:30:00Z"
 * author[0] = Reference(HubCoZo)
@@ -103,23 +117,23 @@ Usage: #example
 * author[0].identifier.value = "urn:oid:1.3.6.1.4.1.21297.1.3"
 * author[0].display = "CoZo (Collaboratief Zorgplatform)"
 * author[1] = Reference(OrgUZLeuven)
-* author[1].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "Hospital"
-* author[1].identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* author[1].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "hospital"
+* author[1].identifier.system = $BE-NS-NIHDI
 * author[1].identifier.value = "71000012"
 * author[1].display = "UZ Leuven"
 * author[2] = Reference(DrDanieleGovaerts)
-* author[2].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#persphysician "Physician"
-* author[2].identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* author[2].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#persphysician "physician"
+* author[2].identifier.system = $BE-NS-NIHDI
 * author[2].identifier.value = "10000007999"
 * author[2].display = "Dr. Danièle Govaerts"
 * authenticator = Reference(DrDanieleGovaerts)
-* authenticator.extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#persphysician "Physician"
-* authenticator.identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* authenticator.extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#persphysician "physician"
+* authenticator.identifier.system = $BE-NS-NIHDI
 * authenticator.identifier.value = "10000007999"
 * authenticator.display = "Dr. Danièle Govaerts"
 * custodian = Reference(OrgUZLeuven)
-* custodian.extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "Hospital"
-* custodian.identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* custodian.extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "hospital"
+* custodian.identifier.system = $BE-NS-NIHDI
 * custodian.identifier.value = "71000012"
 * custodian.display = "UZ Leuven"
 // Relationship to the preliminary version of the same report, by business identifier only:
@@ -154,10 +168,10 @@ Usage: #example
 * identifier[localId].value = "tm-holter-001"
 * status = #current
 * docStatus = #final
-* category[cdTransaction].coding[cdTransactionCode] = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring "Telemonitoring / Remote Patient Monitoring"
+* category[cdTransaction].coding[cdTransactionCode] = $BE-CS-CD-TRANSACTION#telemonitoring "Telemonitoring / Remote Patient Monitoring"
 * type.coding[0] = $LNC#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
 * subject = Reference(PatientPeeters)
-* subject.identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/ssin"
+* subject.identifier.system = $BE-NS-SSIN
 * subject.identifier.value = "79080412345"
 * date = "2026-01-02T08:30:00Z"
 * author[0] = Reference(HubCoZo)
@@ -166,18 +180,18 @@ Usage: #example
 * author[0].identifier.value = "urn:oid:1.3.6.1.4.1.21297.1.3"
 * author[0].display = "CoZo (Collaboratief Zorgplatform)"
 * author[1] = Reference(OrgUZLeuven)
-* author[1].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "Hospital"
-* author[1].identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* author[1].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "hospital"
+* author[1].identifier.system = $BE-NS-NIHDI
 * author[1].identifier.value = "71000012"
 * author[1].display = "UZ Leuven"
 * author[2] = Reference(DrJeanDepondt)
-* author[2].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#persphysician "Physician"
-* author[2].identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* author[2].extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#persphysician "physician"
+* author[2].identifier.system = $BE-NS-NIHDI
 * author[2].identifier.value = "19876543201"
 * author[2].display = "Dr. Jean Depondt"
 * custodian = Reference(OrgUZLeuven)
-* custodian.extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "Hospital"
-* custodian.identifier.system = "https://www.ehealth.fgov.be/standards/fhir/core/NamingSystem/nihdi"
+* custodian.extension[hcPartyType].valueCoding = $BE-CS-CD-HCPARTY#orghospital "hospital"
+* custodian.identifier.system = $BE-NS-NIHDI
 * custodian.identifier.value = "71000012"
 * custodian.display = "UZ Leuven"
 * description = "24-Hour Continuous Holter ECG Monitoring Summary"
@@ -204,7 +218,7 @@ Usage: #example
 * collection.collectedDateTime = "2026-03-15T08:15:00Z"
 
 Instance: ObsGlucoseExample
-InstanceOf: Observation
+InstanceOf: BeObservation
 Title: "Observation: Fasting Blood Glucose"
 Description: "Laboratory test measurement for fasting blood glucose."
 Usage: #example
@@ -220,7 +234,7 @@ Usage: #example
 * specimen = Reference(SpecimenBloodExample)
 
 Instance: ObsCreatinineExample
-InstanceOf: Observation
+InstanceOf: BeObservation
 Title: "Observation: Serum Creatinine"
 Description: "Laboratory test measurement for serum creatinine."
 Usage: #example
@@ -266,7 +280,7 @@ Usage: #example
 * identifier.value = "COMP-LAB-2026-815933567"
 * status = #final
 * type = $LNC#11502-2 "Laboratory report"
-* category = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#labresult "Laboratory Result"
+* category = $BE-CS-CD-TRANSACTION#labresult "Laboratory Result"
 * subject = Reference(PatientPeeters)
 * date = "2026-03-15T10:30:00Z"
 * author[0] = Reference(DrDanieleGovaerts)
@@ -312,7 +326,7 @@ Usage: #example
 // =========================================================================
 
 Instance: ObsHeartRateSummary
-InstanceOf: Observation
+InstanceOf: BeObservation
 Title: "Observation: Mean Heart Rate (Holter)"
 Description: "Average heart rate observed during a 24h Holter telemonitoring session."
 Usage: #example
@@ -342,7 +356,7 @@ Usage: #example
 * identifier.value = "COMP-TM-2026-001"
 * status = #final
 * type = $LNC#18754-2 "Ambulatory cardiac rhythm monitor (Holter) study"
-* category = https://www.ehealth.fgov.be/standards/fhir/core/CodeSystem/cd-transaction#telemonitoring "Telemonitoring / Remote Patient Monitoring"
+* category = $BE-CS-CD-TRANSACTION#telemonitoring "Telemonitoring / Remote Patient Monitoring"
 * subject = Reference(PatientPeeters)
 * date = "2026-01-02T08:30:00Z"
 * author[0] = Reference(DrJeanDepondt)

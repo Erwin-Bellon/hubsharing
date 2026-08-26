@@ -6,7 +6,7 @@
 > * **Summarised here, specified in full elsewhere:** the metadata envelope → [Envelope & Metadata](envelope-and-metadata.html); the two transactions → [Transactions](transactions.html); authentication, tamper-proofing and auditing → [Security & Authentication](security.html); payload encryption → [End-to-End Encryption](end-to-end-encryption.html); the SOAP crosswalk behind the dual-stack gateway → [KMEHR to FHIR Mapping](mapping-kmehr-to-hub.html).
 > * **Next:** [Design Rationale](resource-considerations.html) — why this architecture shares FHIR *documents* rather than messages or granular resources.
 
-## 1. The Belgian Federated Health Ecosystem
+## 1. The Belgian Federated eHealth Ecosystem
 
 Belgium never built a central national repository, and that decision still shapes everything downstream. Under the governance of the eHealth Platform (`ehealth.fgov.be`), clinical data stays where it was produced: in the **hub sources**, meaning the source systems of the care organisations themselves — hospitals, independent laboratories, pharmacies, polyclinics, practice organisations, care homes, and every other organisation type in the KMEHR `CD-HCPARTY` classification. The regional hubs index that data and route requests to it. They do not hold it.
 
